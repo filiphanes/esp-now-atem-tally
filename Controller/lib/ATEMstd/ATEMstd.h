@@ -221,7 +221,7 @@ private:
 			uint16_t atemAudioMixerInputVolume[25];
 			int16_t atemAudioMixerInputBalance[25];
 			uint16_t atemTallyByIndexSources;
-			uint8_t atemTallyByIndexTallyFlags[21];
+			uint8_t atemTallyByIndexTallyFlags[64];
 
 public:
 			// Public Methods in ATEM.h:

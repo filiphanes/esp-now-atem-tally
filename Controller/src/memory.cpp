@@ -2,23 +2,26 @@
 
 #include <EEPROM.h>
 
-IPAddress switcherIp(192, 168, 131, 8);
+IPAddress atemIP(192, 168, 88, 240);
 
-const int EEPROM_ADRESS_SWITCHER_IP = 0;
+const int EEPROM_ADDRESS_SWITCHER_IP = 0;
 
-void loadSwitcherIp()
+void readAtemIP()
 {
   EEPROM.begin(512);
-  EEPROM.get(EEPROM_ADRESS_SWITCHER_IP, switcherIp);
+  EEPROM.get(EEPROM_ADDRESS_SWITCHER_IP, atemIP);
+  if (atemIP.toString() == "255.255.255.255") {
+    // Set default ATEM IP
+    writeAtemIP("192.168.88.240");
+  }
   EEPROM.end();
 }	
 
-void changeSwitcherIp(String newIp)
+void writeAtemIP(String newIp)
 {
-  switcherIp.fromString(newIp);
-
+  atemIP.fromString(newIp);
   EEPROM.begin(512);
-  EEPROM.put(EEPROM_ADRESS_SWITCHER_IP, switcherIp);
+  EEPROM.put(EEPROM_ADDRESS_SWITCHER_IP, atemIP);
   EEPROM.commit();
   EEPROM.end();
 }
