@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../Receiver"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"system_error": "cpp",
+			"*.tcc": "cpp"
+		}
+	}
+}

@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-extern IPAddress switcherIp;
+extern IPAddress atemIP;
 
-void loadSwitcherIp();
-void changeSwitcherIp(String newIp);
+void readAtemIP();
+void writeAtemIP(String newIp);

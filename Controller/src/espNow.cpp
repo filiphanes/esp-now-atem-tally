@@ -10,44 +10,57 @@
 
 // Broadcast address, sends to all devices nearby
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-// Structure example to send data
-// Must match the receiver structure
-typedef struct struct_message
-{
-  boolean program[maxAtemInputs];
-  boolean preview[maxAtemInputs];
-  boolean transition;
-  boolean request;
-} struct_message;
-
-// Create a struct_message called messageData
-struct_message messageData;
-
+struct_message message;
 esp_now_peer_info_t peerInfo;
 
-void sendCurrentAtemState()
+inline uint64_t setBit(uint64_t bits, int i) {
+  return bits | (1 << i);
+}
+
+void broadcastTally()
 {
-  sendMessage(getProgramTallyArray(), getPreviewTallyArray(), getTransition(), false);
+  message.command = SET_TALLY;
+  message.program = getProgramBits();
+  message.preview = getPreviewBits();
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
+  if (result != ESP_OK) Serial.println("esp_now_send != OK");
+}
+
+void broadcastTest(int pgm, int pvw)
+{
+  message.command = SET_TALLY;
+  message.program = 0;
+  message.preview = 0;
+  message.program = setBit(message.preview, pgm-1);
+  message.preview = setBit(message.preview, pvw-1);
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
+  if (result != ESP_OK) Serial.println("esp_now_send != OK");
+}
+
+void switchCamId(uint8_t id1, uint8_t id2)
+{
+  uint8_t msg[3] = {SWITCH_CAMID, id1, id2};
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&msg, sizeof(msg));
+  if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  // Serial.print("\r\nLast Packet Send Status:\t");
+  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
 
 // callback when data is received
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len)
 {
   struct_message *data = (struct_message *)incomingData;
-  Serial.println("Received: ");
-  Serial.println("Request: " + String(data->request));
+  Serial.print("< ");
+  Serial.println(data->command);
 
-  if (data->request)
+  if (data->command == GET_TALLY)
   {
-    sendCurrentAtemState();
+    broadcastTally();
   }
 }
 
@@ -67,7 +80,7 @@ void setupEspNow()
   }
 
   // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet and register peer data receive
+  // get the status of Transmitted packet and register peer data receive
   esp_now_register_send_cb(OnDataSent);
   esp_now_register_recv_cb(OnDataRecv);
 
@@ -81,25 +94,5 @@ void setupEspNow()
   {
     Serial.println("Failed to add peer");
     return;
-  }
-}
-
-void sendMessage(boolean * program, boolean * preview, boolean transition, boolean request)
-{
-  struct_message data;
-  memccpy(data.program, program, maxAtemInputs, sizeof(program));
-  memccpy(data.preview, preview, maxAtemInputs, sizeof(preview));
-  data.transition = transition;
-  data.request = request;
-
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&data, sizeof(data));
-
-  if (result == ESP_OK)
-  {
-    Serial.println("Sent with success");
-  }
-  else
-  {
-    Serial.println("Error sending the data");
   }
 }
