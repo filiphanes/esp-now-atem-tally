@@ -569,12 +569,6 @@ uint16_t ATEMbase::audioDb2Word(float input)  {  // -48 to +6 input
 
 
 
-
-
-
-
-
-
 uint8_t ATEMbase::getVideoSrcIndex(uint16_t videoSrc)	{
 	switch(videoSrc){
 		case 0:  // Black

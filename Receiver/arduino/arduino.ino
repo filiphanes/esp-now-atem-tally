@@ -166,6 +166,8 @@ enum enum_command : uint8_t {
   SET_TALLY = 1,
   GET_TALLY = 2,
   SWITCH_CAMID = 3,
+  HEARTBEAT = 4,
+  SET_ID = 5,
 };
 
 // Must match the sender structure
