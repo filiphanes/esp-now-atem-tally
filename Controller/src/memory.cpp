@@ -2,7 +2,7 @@
 
 #include <EEPROM.h>
 
-IPAddress atemIP(192, 168, 88, 240);
+IPAddress atemIP(192, 168, 2, 240);
 
 const int EEPROM_ADDRESS_SWITCHER_IP = 0;
 

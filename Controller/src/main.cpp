@@ -1,15 +1,36 @@
 #include <Arduino.h>
+#include <ATEMbase.h>
+#include <ATEMstd.h>
 
 #include "memory.h"
-#include "atemConnection.h"
 #include "espNow.h"
 #include "configWebserver.h"
 #include "constants.h"
+#include "main.h"
 
 #define ERROR_LED_PIN 2
 
-void setup()
-{
+ATEMstd AtemSwitcher;
+long lastMessageAt = 0;
+boolean lastAtemIsConnected = false;
+
+uint64_t getProgramBits() {
+  uint64_t bits = 0;
+  for (int i=1; i <= TALLY_COUNT; i++)
+    if (AtemSwitcher.getProgramTally(i))
+      bits |= 1 << (i-1);
+  return bits;
+}
+
+uint64_t getPreviewBits() {
+  uint64_t bits = 0;
+  for (int i=1; i <= TALLY_COUNT; i++)
+    if (AtemSwitcher.getPreviewTally(i))
+      bits |= 1 << (i-1);
+  return bits;
+}
+
+void setup() {
   Serial.begin(115200);
   while (!Serial)
     delay(5);
@@ -17,28 +38,28 @@ void setup()
   // Set LED pin to output mode
   // pinMode(ERROR_LED_PIN, OUTPUT);
   // digitalWrite(ERROR_LED_PIN, HIGH);
-  Serial.print("readAtemIP()");
-  readAtemIP();
+  Serial.print("readAtemIP");
+  readAtemIP();  // Comment if default 192.168.2.240 is needed
   Serial.print("atemIP: ");
   Serial.println(atemIP.toString());
-  Serial.println("setupWebserver()");
+  Serial.println("setupWebserver");
   setupWebserver();
-  Serial.println("setupEspNow()");
+  Serial.println("setupEspNow");
   setupEspNow();
-  Serial.println("setupAtemConnection()");
-  setupAtemConnection();
+
+  Serial.println("setupAtemConnection");
+  AtemSwitcher.begin(atemIP);
+  AtemSwitcher.serialOutput(1);
+  AtemSwitcher.connect();
+  AtemSwitcher.setAtemTallyCallback(broadcastTally);
 }
 
-long lastMessageAt = 0;
-boolean lastAtemIsConnected = false;
-
-void loop()
-{
+void loop() {
   webserverLoop();
-  atemLoop();
+  AtemSwitcher.runLoop();
 
-  if (atemIsConnected()) {
-    if (checkForAtemChanges() || (millis() - lastMessageAt > TALLY_UPDATE_EACH)) {
+  if (AtemSwitcher.isConnected()) {
+    if (millis() - lastMessageAt > TALLY_UPDATE_EACH) {
       broadcastTally();
       lastMessageAt = millis();
     }
@@ -49,5 +70,5 @@ void loop()
     lastAtemIsConnected = false;
   }
 
-  delay(5);
+  delay(20);
 }

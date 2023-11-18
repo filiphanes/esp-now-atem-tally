@@ -1,10 +1,9 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
-#include <AsyncTCP.h>
-#include <DNSServer.h>
 #include <EEPROM.h>
 #include <esp_now.h>
-#include <ESPAsyncWebServer.h>
+#include <esp_wifi.h>
+#include <esp_wifi_types.h>
 #include <stdint.h> 
 #include <WiFi.h>
 #include <WiFiAP.h>
@@ -14,24 +13,24 @@
 #define TALLY_UPDATE_EACH 60000 // 1 minute;
 #define LED_PIN    8
 #define LED_COUNT  25
-#define BRIGHTNESS 64  // 0-255
+#define BRIGHTNESS 10  // 0-255
 #define CAMERA_ID_ADDRESS 0
-#define CONFIG_BUTTON 13 // = D7
 #define DEBUG 1
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-boolean configMode = false;
-long lastMessageReceived = -TALLY_UPDATE_EACH;
+unsigned long lastMessageReceived = -TALLY_UPDATE_EACH;
 uint8_t camId = 0;
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-const String ssid = "tally";
-const String password = "tally";
 
-AsyncWebServer server(80);
-DNSServer dnsServer;
-
-IPAddress gateway(192, 168, 1, 1);
-IPAddress subnet(255, 255, 255, 0);
+enum enum_command : uint8_t {
+  SET_TALLY = 1,
+  GET_TALLY = 2,
+  SWITCH_CAMID = 3,
+  HEARTBEAT = 4,
+  SET_ID = 5,
+  SET_COLOR = 6,
+  SET_BRIGHTNESS = 7,
+};
 
 void colorBlink(uint8_t r, uint8_t g, uint8_t b, int wait) {
   int count = 3;
@@ -55,17 +54,10 @@ void colorWipe(uint8_t r, uint8_t g, uint8_t b, int wait) {
   }
 }
 
-void configLedAnimation() {
-  // wipe to blue
-  colorWipe(  0,   0, 255, 5);
-  // wipe to black
-  colorWipe(  0,   0,   0, 5);
-}
-
 void readCamId() {
   EEPROM.begin(512);
   EEPROM.get(CAMERA_ID_ADDRESS, camId);
-  if (camId > TALLY_COUNT) camId = 1;
+  if (camId > TALLY_COUNT) camId = 3;
   EEPROM.commit();
   Serial.print("camId: ");
   Serial.println(camId);
@@ -76,102 +68,6 @@ void writeCamId() {
   EEPROM.put(CAMERA_ID_ADDRESS, camId);
   EEPROM.commit();
 }
-
-void handleRoot(AsyncWebServerRequest *request) {
-  String message = "";
-  if (request->method() == HTTP_POST) {
-    String cameraId = request->getParam("camera-id", true)->value();
-    camId = cameraId.toInt();
-    if (camId > TALLY_COUNT) camId = TALLY_COUNT;
-    writeCamId();
-    Serial.print("camId=");
-    Serial.println(camId);
-    message = "Camera ID set to: " + cameraId + ". Restart device!";
-  }
-  request->send(200, "text/html", "<html><head>"
-    "<title>ESP NOW Tally</title>"
-    "<style>"
-      "body {background-color: black; color: #e6e5df; margin-top: 1rem;}"
-    "</style>"
-    "<script>"
-      "function post(u){var x=new XMLHttpRequest();x.open('post',u);x.send()}"
-    "</script>"
-    "</head>"
-    "<body>"
-    "<strong>"+message+"</strong>"
-    "<form method=\"post\" enctype=\"application/x-www-form-urlencoded\">"
-    "<label>Camera Id:</label><br>"
-    "<input type=\"number\" name=\"camera-id\" value=\"" + String(camId) + "\"><br>"
-    "<input type=\"submit\" value=\"Save\"><br>"
-    "<button onclick=\"post('red')\" style='color: red;'>Blink RED</button>"
-    "<button onclick=\"post('green')\" style='color: green;'>Blink GREEN</button>"
-    "<button onclick=\"post('blue')\" style='color: blue;'>Blink BLUE</button>"
-    "<button onclick=\"post('restart')\">Restart</button>"
-    "</form></body></html>");
-}
-
-void handleRed(AsyncWebServerRequest *request) {
-  request->send(200, "text/plain", "OK");
-  colorBlink(255, 0, 0, 100);
-}
-
-void handleGreen(AsyncWebServerRequest *request) {
-  request->send(200, "text/plain", "OK");
-  colorBlink(0, 255, 0, 100);
-}
-
-void handleBlue(AsyncWebServerRequest *request) {
-  request->send(200, "text/plain", "OK");
-  colorBlink(0, 0, 255, 100);
-}
-
-void handleRestart(AsyncWebServerRequest *request){
-  request->send(200, "text/plain", "OK");
-  colorWipe(0, 0, 0, 10);
-  delay(1);
-  ESP.restart();
-}
-
-void notFound(AsyncWebServerRequest *request) {
-  request->send(404, "text/plain", "Not found");
-}
-
-void setupWebserver() {
-  WiFi.mode(WIFI_AP);
-  Serial.print("Setting soft-AP configuration ... ");
-  Serial.println(WiFi.softAPConfig(gateway, gateway, subnet) ? "Ready" : "Failed!");
-
-  Serial.print("Setting soft-AP ... ");
-  Serial.println(WiFi.softAP(ssid) ? "Ready" : "Failed!");
-
-  /* Setup the DNS server redirecting all the domains to the apIP */
-  dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-  dnsServer.start(53, "*", WiFi.softAPIP());
-
-  Serial.println("Connect to WiFi network with SSID: " + String(ssid) + " (" + String(camId) + ")" + " to configure the device.");
-
-  server.on("/", handleRoot);
-  server.on("/red", handleRed);
-  server.on("/green", handleGreen);
-  server.on("/blue", handleBlue);
-  server.on("/restart", handleRestart);
-  server.onNotFound(handleRoot);
-  server.begin();
-}
-
-enum enum_command : uint8_t {
-  SET_TALLY = 1,
-  GET_TALLY = 2,
-  SWITCH_CAMID = 3,
-};
-
-// Must match the sender structure
-typedef struct struct_message {
-  enum_command command;
-  uint64_t program = 0;
-  uint64_t preview = 0;
-} struct_message;
-struct_message messageData;
 
 // 5x5 matrices for digits 0 to 9
 const unsigned digits5x5[10*25] = {
@@ -243,7 +139,7 @@ void displayNumber(uint8_t r, uint8_t g, uint8_t b, int number) {
   int i = 0;
   for (i = 0; i < 25; i++) {
     x = digits5x5[digit*25 + i];
-    strip.setPixelColor(i, x*r, x*g, x*b);
+    strip.setPixelColor(24-i, x*r, x*g, x*b);
   }
   // Signify tens by number of first white pixels
   if (r+g+b > 0) {
@@ -252,6 +148,13 @@ void displayNumber(uint8_t r, uint8_t g, uint8_t b, int number) {
       strip.setPixelColor(i, 255, 255, 255);
       number -= 10;
     }
+  }
+  strip.show();
+}
+
+void fillColor(uint8_t r, uint8_t g, uint8_t b) {
+  for (int i=0; i<25; i++) {
+    strip.setPixelColor(i, r, g, b);
   }
   strip.show();
 }
@@ -265,34 +168,72 @@ inline bool getBit(uint64_t bits, int i) {
 }
 
 // Callback function that will be executed when data is received
-void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-  struct_message *data = (struct_message *)incomingData;
-  lastMessageReceived = millis();
-  Serial.printf("Length: %d\n", len);
-  Serial.print("Command: ");
-  switch (data->command) {
-  case SET_TALLY:
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
+  enum_command command = (enum_command)data[0];
+  Serial.printf("Command[%d]: ");
+  switch (command) {
+
+  case SET_TALLY: {
+    uint64_t *program_p = (uint64_t *)(data+1);
+    uint64_t *preview_p = (uint64_t *)(data+1+sizeof(uint64_t));
+    if      (getBit(*program_p, camId-1)) fillColor(255, 0, 0);
+    else if (getBit(*preview_p, camId-1)) fillColor(0, 255, 0);
+    else fillColor(0, 0, 0);
+    lastMessageReceived = millis();
+#ifdef DEBUG
     Serial.println("SET_TALLY");
-    // for (int i=1; i<len; i++) Serial.printf("%02x ", incomingData[i]);
+    // for (int i=1; i<len; i++) Serial.printf("%02x ", data[i]);
     // Serial.println();
     Serial.print("Program ");
-    for (int i=0; i<TALLY_COUNT; i++) Serial.print(getBit(data->program, i - 1)?1:0);
+    for (int i=0; i<TALLY_COUNT; i++) Serial.print(getBit(*program_p, i)?1:0);
     Serial.println();
     Serial.print("Preview ");
-    for (int i=0; i<TALLY_COUNT; i++) Serial.print(getBit(data->preview, i - 1)?1:0);
+    for (int i=0; i<TALLY_COUNT; i++) Serial.print(getBit(*preview_p, i)?1:0);
     Serial.println();
-    displayNumber(getBit(data->program, camId - 1) ? 255 : 0,
-                  getBit(data->preview, camId - 1) ? 255 : 0,
-                  0,
-                  camId);
+#endif
     break;
+  }
+    
+  case HEARTBEAT:
+    break;
+
+  case SET_COLOR: {
+    uint64_t *mask_p = (uint64_t *)(data+4);
+    if (getBit(*mask_p, camId-1)) {
+      fillColor(data[1], data[2], data[3]);
+      Serial.printf("SET_COLOR 0x%x%x%x\n", data[2], data[3], data[4]);
+    }
+    lastMessageReceived = millis();
+    break;
+  }
+  
+  case SET_BRIGHTNESS: {
+    uint64_t id = data[1];
+    uint64_t brightness = data[2];
+    Serial.printf("SET_BRIGHTNESS %d %d\n", id, brightness);
+    if (id == camId || id == 0xFF) strip.setBrightness(brightness);
+    lastMessageReceived = millis();
+  }
+
+  case SET_ID: {
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    if (memcmp(mac, (uint8_t*) (data + sizeof(enum_command)), 6) == 0) {
+      camId = data[7];
+      Serial.printf("SET_ID %d\n", camId);
+    }
+    lastMessageReceived = millis();
+    break;
+  }
+
   case GET_TALLY:
     // TODO: Relay tally info, when requester not in range
     Serial.println("GET_TALLY");
     break;
-  case SWITCH_CAMID:
-    uint8_t* id1 = (uint8_t*) incomingData + sizeof(enum_command);
-    uint8_t* id2 = (uint8_t*) incomingData + sizeof(enum_command) + sizeof(uint8_t);
+
+  case SWITCH_CAMID: {
+    uint8_t* id1 = (uint8_t*) (data + sizeof(enum_command));
+    uint8_t* id2 = (uint8_t*) (data + sizeof(enum_command) + sizeof(uint8_t));
     Serial.printf("SWITCH_CAMID %d<>%d", id1, id2);
     if (camId == *id1) {
       camId = *id2;
@@ -301,22 +242,31 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
       camId = *id1;
       writeCamId();
     }
+    lastMessageReceived = millis();
     break;
+  }
   }
 }
 
-void requestState() {
-  messageData.command = GET_TALLY;
-  esp_err_t err = esp_now_send(broadcastAddress, (uint8_t *)&messageData, sizeof(enum_command));
+void sendHeartbeat() {
+  uint8_t payload[2] = {HEARTBEAT, camId};
+  esp_err_t err = esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload));
   #ifdef DEBUG
-  Serial.printf("Sent %d\n", messageData.command);
+  Serial.printf(">HEARTBEAT\n");
   #endif
   if (err) Serial.printf("esp_now_send returned 0x%x\n", err);
 }
 
-void setupEspNow() {
+void setup() {
+  Serial.begin(115200);
+  strip.begin();
+  strip.setBrightness(BRIGHTNESS);
+  readCamId();
+  // strip.show();  // Turn OFF all pixels ASAP
+  displayNumber(0, 0, 255, camId);
+  delay(300);
+
   Serial.println("Starting ESP NOW");
-  
   if (!WiFi.mode(WIFI_STA)) {
     Serial.println("WiFi.mode not successfull");
   }
@@ -340,41 +290,12 @@ void setupEspNow() {
   esp_now_register_recv_cb(OnDataRecv);
 }
 
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-  Serial.println("Started");
-
-  strip.begin();
-  strip.show();  // Turn OFF all pixels ASAP
-  strip.setBrightness(BRIGHTNESS);
-  readCamId();
-
-  /*
-  pinMode(CONFIG_BUTTON, INPUT_PULLDOWN);
-  if (digitalRead(CONFIG_BUTTON) == HIGH) {
-    Serial.println("Config mode activated");
-    configMode = true;
-    // configLedAnimation();
-    setupWebserver();
-    return;
-  }
-  */
-
-  setupEspNow();
-}
-
 void loop() {
-  if (configMode) {
-    dnsServer.processNextRequest();
-    Serial.print(".");
-    delay(10);
-    return;
+  sendHeartbeat();
+  delay(10000);
+  if (millis() - lastMessageReceived > 5000) {
+    fillColor(0, 0, 0);
+    strip.setPixelColor(millis()%LED_COUNT, 128, 0, 0);
+    strip.show();
   }
-
-  if ((millis() - lastMessageReceived) > TALLY_UPDATE_EACH) {
-    requestState();
-    lastMessageReceived = millis();
-  }
-  delay(500);
 }

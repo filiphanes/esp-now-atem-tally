@@ -5,42 +5,65 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-#include "atemConnection.h"
 #include "constants.h"
+#include "main.h"
+
+#define MAX_TALLY_COUNT 64
 
 // Broadcast address, sends to all devices nearby
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-struct_message message;
 esp_now_peer_info_t peerInfo;
+esp_now_tally_info_t tallies[MAX_TALLY_COUNT];
 
-inline uint64_t setBit(uint64_t bits, int i) {
-  return bits | (1 << i);
+esp_now_tally_info_t * get_tallies() {
+  return tallies;
 }
 
 void broadcastTally()
 {
-  message.command = SET_TALLY;
-  message.program = getProgramBits();
-  message.preview = getPreviewBits();
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
+  uint64_t program = getProgramBits();
+  uint64_t preview = getPreviewBits();
+  broadcastTally(&program, &preview);
+}
+
+void broadcastTally(uint64_t *program, uint64_t *preview) {
+  uint8_t payload[1+sizeof(uint64_t)+sizeof(uint64_t)];
+  payload[0] = SET_TALLY;
+  memcpy(payload+1, program, sizeof(uint64_t));
+  memcpy(payload+1+sizeof(uint64_t), preview, sizeof(uint64_t));
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
-void broadcastTest(int pgm, int pvw)
-{
-  message.command = SET_TALLY;
-  message.program = 0;
-  message.preview = 0;
-  message.program = setBit(message.preview, pgm-1);
-  message.preview = setBit(message.preview, pvw-1);
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
+void broadcastTest(int pgm, int pvw) {
+  uint64_t program = 0;
+  uint64_t preview = 0;
+  program = program | (1 << pgm-1);
+  preview = preview | (1 << pvw-1);
+  broadcastTally(&program, &preview);
+}
+
+void switchCamId(uint8_t id1, uint8_t id2) {
+  uint8_t payload[3] = {SWITCH_CAMID, id1, id2};
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
-void switchCamId(uint8_t id1, uint8_t id2)
-{
-  uint8_t msg[3] = {SWITCH_CAMID, id1, id2};
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&msg, sizeof(msg));
+void broadcastBrightness(uint8_t id, uint8_t brightness) {
+  uint8_t payload[3] {SET_BRIGHTNESS, id, brightness};
+  if (!esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload))) {
+    Serial.println("esp_now_send != OK");
+  }
+}
+
+void broadcastColor(uint8_t r, uint8_t g, uint8_t b, uint64_t *bits) {
+  uint8_t payload[4+sizeof(uint64_t)];
+  payload[0] = SET_COLOR;
+  payload[1] = r;
+  payload[2] = g;
+  payload[3] = b;
+  memcpy(payload+4, bits, sizeof(bits));
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
@@ -52,30 +75,51 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 }
 
 // callback when data is received
-void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len)
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
 {
-  struct_message *data = (struct_message *)incomingData;
-  Serial.print("< ");
-  Serial.println(data->command);
-
-  if (data->command == GET_TALLY)
+  enum_command command = (enum_command) data[0];
+  Serial.printf("Command[%d]: ", len);
+  switch (command)
   {
+  case HEARTBEAT: {
+    Serial.printf("HEARTBEAT %d\n", data[8]);
+    for (int i=0; i<MAX_TALLY_COUNT; i++) {
+      if (memcmp(tallies[i].mac_addr, mac_addr, 6) == 0) {
+        // Found
+        tallies[i].id = data[1];
+        tallies[i].last_seen = millis();
+        break;
+      } else if (tallies[i].id == 0) {
+        // Add to end of list
+        memcpy(tallies[i].mac_addr, mac_addr, 6);
+        tallies[i].id = data[1];
+        tallies[i].last_seen = millis();
+        break;
+      }
+    }
+    break;
+  }
+  
+  case GET_TALLY:
+    Serial.println("GET_TALLY");
     broadcastTally();
+    break;
+  
+  default:
+    break;
   }
 }
 
 void setupEspNow()
 {
-  Serial.println("Init ESP-NOW ...");
+  Serial.println("Init ESP-NOW");
   WiFi.mode(WIFI_STA);
   // config long range mode
   int a = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
   Serial.println(a);
-
   // Init ESP-NOW
-  if (esp_now_init() != ESP_OK)
-  {
-    Serial.println("Error initializing ESP-NOW");
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("esp_now_init != OK");
     return;
   }
 
@@ -90,9 +134,13 @@ void setupEspNow()
   peerInfo.encrypt = false;
 
   // Add peer
-  if (esp_now_add_peer(&peerInfo) != ESP_OK)
-  {
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
     Serial.println("Failed to add peer");
     return;
+  }
+  
+  // Zero tallies array
+  for (int i=0; i<MAX_TALLY_COUNT; i++) {
+    tallies[i].id = 0;
   }
 }
