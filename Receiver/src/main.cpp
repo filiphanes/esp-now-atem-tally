@@ -27,9 +27,21 @@ enum enum_command : uint8_t {
   GET_TALLY = 2,
   SWITCH_CAMID = 3,
   HEARTBEAT = 4,
-  SET_ID = 5,
+  SET_CAMID = 5,
   SET_COLOR = 6,
   SET_BRIGHTNESS = 7,
+
+  SIGNAL_CHANGE = 12,
+  SIGNAL_LEFT = 13,
+  SIGNAL_DOWN = 14,
+  SIGNAL_UP = 15,
+  SIGNAL_RIGHT = 16,
+  SIGNAL_FOCUS = 17,
+  SIGNAL_DEFOCUS = 18,
+  SIGNAL_ZOOMIN = 19,
+  SIGNAL_ZOOMOUT = 20,
+  SIGNAL_ISOUP = 21,
+  SIGNAL_ISODOWN = 22,
 };
 
 void colorBlink(uint8_t r, uint8_t g, uint8_t b, int wait) {
@@ -57,7 +69,7 @@ void colorWipe(uint8_t r, uint8_t g, uint8_t b, int wait) {
 void readCamId() {
   EEPROM.begin(512);
   EEPROM.get(CAMERA_ID_ADDRESS, camId);
-  if (camId > TALLY_COUNT) camId = 3;
+  if (camId > TALLY_COUNT) camId = 2;
   EEPROM.commit();
   Serial.print("camId: ");
   Serial.println(camId);
@@ -70,7 +82,7 @@ void writeCamId() {
 }
 
 // 5x5 matrices for digits 0 to 9
-const unsigned digits5x5[10*25] = {
+const unsigned digits5x5[] = {
   0,1,1,1,0,
   1,0,0,0,1,
   1,0,0,0,1,
@@ -91,7 +103,7 @@ const unsigned digits5x5[10*25] = {
 
   1,1,1,1,0,
   0,0,0,0,1,
-  1,1,1,1,0,
+  0,1,1,1,0,
   0,0,0,0,1,
   1,1,1,1,0,
 
@@ -129,27 +141,102 @@ const unsigned digits5x5[10*25] = {
   1,0,0,0,1,
   0,1,1,1,1,
   0,0,0,0,1,
-  0,1,1,1,0
+  0,1,1,1,0,
+  // CHANGE
+  1,0,0,0,1,
+  0,1,0,1,0,
+  0,0,1,0,0,
+  0,1,0,1,0,
+  1,0,0,0,1,
+  // Left
+  0,0,1,0,0,
+  0,1,0,0,0,
+  1,1,1,1,1,
+  0,1,0,0,0,
+  0,0,1,0,0,
+  // Down
+  0,0,1,0,0,
+  0,0,1,0,0,
+  1,0,1,0,1,
+  0,1,1,1,0,
+  0,0,1,0,0,
+  // Up
+  0,0,1,0,0,
+  0,1,1,1,0,
+  1,0,1,0,1,
+  0,0,1,0,0,
+  0,0,1,0,0,
+  // Right
+  0,0,1,0,0,
+  0,0,0,1,0,
+  1,1,1,1,1,
+  0,0,0,1,0,
+  0,0,1,0,0,
+  // Focus
+  1,1,1,1,1,
+  1,0,0,0,0,
+  1,1,1,1,0,
+  1,0,0,0,0,
+  1,0,0,0,0,
+  // DeFocus (Blur)
+  1,1,1,1,0,
+  1,0,0,0,1,
+  1,1,1,1,0,
+  1,0,0,0,1,
+  1,1,1,1,0,
+  // ZoomIn
+  1,1,1,1,1,
+  0,0,0,1,0,
+  0,0,1,0,0,
+  0,1,0,0,0,
+  1,1,1,1,1,
+  // ZoomOut
+  1,1,1,1,1,
+  0,1,0,0,0,
+  0,0,1,0,0,
+  0,0,0,1,0,
+  1,1,1,1,1,
+  // ISO+
+  1,0,0,0,0,
+  1,0,0,1,0,
+  1,0,1,1,1,
+  1,0,0,1,0,
+  1,0,0,0,0,
+  // ISO-
+  1,0,0,0,0,
+  1,0,0,0,0,
+  1,0,1,1,1,
+  1,0,0,0,0,
+  1,0,0,0,0,
+
+  0
 };
 
-// Display a digit in the 5x5 matrix using given color
-void displayNumber(uint8_t r, uint8_t g, uint8_t b, int number) {
-  int digit = number % 10;
+void displayDigit(uint8_t r, uint8_t g, uint8_t b, uint8_t digit) {
   uint8_t x = 0;
-  int i = 0;
-  for (i = 0; i < 25; i++) {
+  for (int i = 0; i < 25; i++) {
     x = digits5x5[digit*25 + i];
     strip.setPixelColor(24-i, x*r, x*g, x*b);
   }
+  strip.show();
+}
+
+// Display a digit in the 5x5 matrix using given color
+void displayNumber(uint8_t r, uint8_t g, uint8_t b, uint8_t number) {
+  displayDigit(r, g, b, number % 10);
   // Signify tens by number of first white pixels
   if (r+g+b > 0) {
-    for(i=0; i<LED_COUNT; i++) {
+    for(int i=0; i<LED_COUNT; i++) {
       if (number < 10) break;
       strip.setPixelColor(i, 255, 255, 255);
       number -= 10;
     }
   }
   strip.show();
+}
+
+void displaySignal(uint8_t signal) {
+  displayDigit(0, 0, 255, signal - 2);
 }
 
 void fillColor(uint8_t r, uint8_t g, uint8_t b) {
@@ -159,10 +246,6 @@ void fillColor(uint8_t r, uint8_t g, uint8_t b) {
   strip.show();
 }
 
-inline uint64_t setBit(uint64_t bits, int i) {
-  return bits | (1 << i);
-}
-
 inline bool getBit(uint64_t bits, int i) {
   return bits & (1 << i);
 }
@@ -170,7 +253,7 @@ inline bool getBit(uint64_t bits, int i) {
 // Callback function that will be executed when data is received
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   enum_command command = (enum_command)data[0];
-  Serial.printf("Command[%d]: ");
+  Serial.printf("<[%d] ");
   switch (command) {
 
   case SET_TALLY: {
@@ -198,38 +281,52 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
     break;
 
   case SET_COLOR: {
-    uint64_t *mask_p = (uint64_t *)(data+4);
-    if (getBit(*mask_p, camId-1)) {
+    uint64_t *bits_p = (uint64_t *)(data+4);
+    Serial.printf("SET_COLOR #%02x%02x%02x\n", data[2], data[3], data[4]);
+    if (getBit(*bits_p, camId-1)) {
       fillColor(data[1], data[2], data[3]);
-      Serial.printf("SET_COLOR 0x%x%x%x\n", data[2], data[3], data[4]);
     }
     lastMessageReceived = millis();
     break;
   }
   
-  case SET_BRIGHTNESS: {
-    uint64_t id = data[1];
-    uint64_t brightness = data[2];
-    Serial.printf("SET_BRIGHTNESS %d %d\n", id, brightness);
-    if (id == camId || id == 0xFF) strip.setBrightness(brightness);
-    lastMessageReceived = millis();
+  case SIGNAL_CHANGE:
+  case SIGNAL_FOCUS:
+  case SIGNAL_DEFOCUS:
+  case SIGNAL_ZOOMIN:
+  case SIGNAL_ZOOMOUT:
+  case SIGNAL_LEFT:
+  case SIGNAL_DOWN:
+  case SIGNAL_UP:
+  case SIGNAL_RIGHT:
+  case SIGNAL_ISOUP:
+  case SIGNAL_ISODOWN: {
+    uint64_t *bits_p = (uint64_t *)(data+1);
+    Serial.printf("SIGNAL %u %lu\n", command, *bits_p);
+    if (getBit(*bits_p, camId-1)) displaySignal(command);
+    break;
   }
 
-  case SET_ID: {
-    uint8_t mac[6];
-    esp_wifi_get_mac(WIFI_IF_STA, mac);
-    if (memcmp(mac, (uint8_t*) (data + sizeof(enum_command)), 6) == 0) {
-      camId = data[7];
-      Serial.printf("SET_ID %d\n", camId);
+  case SET_BRIGHTNESS: {
+    uint64_t *bits_p = (uint64_t *)(data+1);
+    uint64_t brightness = data[1];
+    if (getBit(*bits_p, camId-1)) {
+      strip.setBrightness(brightness);
     }
     lastMessageReceived = millis();
     break;
   }
 
-  case GET_TALLY:
-    // TODO: Relay tally info, when requester not in range
-    Serial.println("GET_TALLY");
+  case SET_CAMID: {
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    if (memcmp(mac, (uint8_t*) (data + sizeof(enum_command)), 6) == 0) {
+      camId = data[7];
+      Serial.printf("SET_CAMID %d\n", camId);
+    }
+    lastMessageReceived = millis();
     break;
+  }
 
   case SWITCH_CAMID: {
     uint8_t* id1 = (uint8_t*) (data + sizeof(enum_command));
@@ -245,6 +342,11 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
     lastMessageReceived = millis();
     break;
   }
+
+  case GET_TALLY:
+    Serial.println("GET_TALLY");
+    break;
+
   }
 }
 

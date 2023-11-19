@@ -8,9 +8,9 @@
 
 WebServer web(80);
 
-String getATEMInformationHTML() {
-  String s = "";
-  for (int i=1; i<64; i++) {
+String getATEMInputs() {
+  String s = "<div class=inputs>";
+  for (int i=1; i<=40; i++) {
     if (AtemSwitcher.getProgramTally(i)) {
       s += "<i class=pgm>" + String(i) + "</i>";
     } else
@@ -19,8 +19,9 @@ String getATEMInformationHTML() {
     } else {
       s += "<i>" + String(i) + "</i>";
     }
+    if (i%10 == 0) s += "<br/>";
   }
-  return s;
+  return s + "</div>";
 }
 
 String getTalliesHTML() {
@@ -35,56 +36,61 @@ String getTalliesHTML() {
 }
 
 void handleRoot() {
-  String message = "";
-  if (web.method() == HTTP_POST) {
-    for (uint8_t i = 0; i < web.args(); i++) {
-      if (web.argName(i) == "atemip") {
-        writeAtemIP(web.arg(i));
-        message += "ATEM IP set to: " + web.arg(i) + "\n";
-      }
-    }
-  }
   web.send(200, "text/html", "<html>"
     "<head>"
       "<title>Tally bridge config</title>"
       "<style>"
-      "body {background-color: black; color: #e6e5df; margin-top: 2rem;}"
-      "form {display: flex; flex-direction: column; margin: 2rem 0;}"
-      "input {max-width: 10rem;}"
-      "i {padding: .3rem .5rem; display: inline-block;}"
-      "i.pgm {background: red; color: black;}"
-      "i.pvw {background: green; color: black;}"
+        "body { background-color: black; color: #e6e5df; margin: 1rem; }"
+        "form { display: flex; flex-direction: column; margin: 2rem 0; }"
+        "input { max-width: 10rem; }"
+        "button { margin: 0 0 .5rem 0; }"
+        "i { padding: .3rem 0 0; width: 1.5rem; height: 1.5rem; text-align:center; display: inline-block; font-style: normal; border: 1px solid black; cursor: pointer; }"
+        "i.pgm { background: red; color: black; }"
+        "i.pvw { background: green; color: black; }"
+        "i:hover { border-color: gray; }"
+        "i.sel { border-color: yellow; }"
       "</style>"
     "</head>"
     "<body>"
-    "<pre>" + message + "</pre>"
+    + getATEMInputs() + getTalliesHTML() +
+    "<button onclick=\"selNone()\">None</button>"
+    "<button onclick=\"selAll()\">All</button>"
+    "<button onclick=\"color(0xff0000)\">Red</button>"
+    "<button onclick=\"color(0x00ff00)\">Green</button>"
+    "<button onclick=\"color(0x0000ff)\">Blue</button><br/>"
+    "<button onclick=\"signal(12)\">Change</button>"
+    "<button onclick=\"signal(13)\">Left</button>"
+    "<button onclick=\"signal(14)\">Down</button>"
+    "<button onclick=\"signal(15)\">Up</button>"
+    "<button onclick=\"signal(16)\">Right</button>"
+    "<button onclick=\"signal(17)\">Focus</button>"
+    "<button onclick=\"signal(18)\">DeFocus</button>"
+    "<button onclick=\"signal(19)\">ZoomIn</button>"
+    "<button onclick=\"signal(20)\">ZoomOut</button>"
+    "<button onclick=\"signal(21)\">ISO+</button>"
+    "<button onclick=\"signal(22)\">ISO-</button><br/>"
+    "<input type=\"number\" name=\"camId\" placeholder=\"camId\"/>"
+    "<button onclick=\"camId()\">Set camId</button><br/>"
+    "<input type=\"number\" name=\"brightness\" placeholder=\"brightness\"/>"
+    "<button onclick=\"brightness()\">Set brightness</button><br>"
     "<form method=\"post\" enctype=\"application/x-www-form-urlencoded\">"
-      "<label>ATEM IP address:</label><br>"
       "<input type=\"text\" name=\"atemip\" value=\"" + atemIP.toString() + "\"><br>"
-      "<input type=\"submit\" value=\"Save\">"
+      "<input type=\"submit\" value=\"Set ATEM IP\">"
     "</form>"
-    "<form method=\"post\" action=\"test\" enctype=\"application/x-www-form-urlencoded\">"
-      "<label for=\"preview\">Preview:</label><input type=\"number\" name=\"preview\" value=\"2\">"
-      "<label for=\"program\">Program:</label><input type=\"number\" name=\"program\" value=\"1\">"
-      "<input type=\"submit\" value=\"Test\">"
-    "</form>"
-    + getATEMInformationHTML() + getTalliesHTML() +
     "<script>"
-      "function post(u){var x=new XMLHttpRequest();x.open('post',u);x.send()}"
-      "document.querySelectorAll('div').forEach((e) => {e.addEventListener('click', ()=>{post(`/tally?program=${e.innerText}&preview=1`)})})"
+      "const all_i = document.querySelectorAll('i');"
+      "all_i.forEach((e) => { e.addEventListener('click', () => { e.classList.toggle('sel')}) });"
+      "function selNone() { all_i.forEach((e) => e.classList.remove('sel')) };"
+      "function selAll() { all_i.forEach((e) => e.classList.add('sel')) };"
+      "function inputs() {const ii=[]; document.querySelectorAll('i.sel').forEach((e) => ii.push(e.innerText)); return ii.join(); };"
+      "function post(u){var x=new XMLHttpRequest();x.open('post',u);x.send()};"
+      "function brightness() { const b = document.querySelector(\"input[name='brightness']\").value; post(`/set?brightness=${b}&i=${inputs()}`) };"
+      "function color(c) { post(`/set?color=${c.toString(16)}&i=${inputs()}`) };"
+      "function signal(n) { post(`/set?signal=${n}&i=${inputs()}`) };"
+      "function camId() { const camId = document.querySelector(\"input[name='camId']\").value; post(`/set?camid=${camId}&i=${inputs()}`) };"
     "</script>"
     "</body>"
     "</html>");
-}
-
-void handleTest() {
-  if (web.method() != HTTP_POST) {
-    web.send(405, F("text/plain"), F("Method Not Allowed"));
-    return;
-  }
-  broadcastTest(web.arg("program").toInt(), web.arg("preview").toInt());
-  web.sendHeader("Location", "/");
-  web.send(301, F("text/plain"), F("OK"));
 }
 
 uint64_t bitsFromCSV(String s) {
@@ -94,39 +100,63 @@ uint64_t bitsFromCSV(String s) {
   for (size_t i = 0; i <= s.length(); ++i) {
     if (i == s.length() || s[i] == ',') {
       number = s.substring(startPos, i - startPos).toInt();
-      bits += 1 << (number-1);
+      bits |= 1 << (number-1);
       startPos = i + 1;
     }
   }
   return bits;
 }
 
-void handleTally() {
-  uint64_t programBits = bitsFromCSV(web.arg("program"));
-  uint64_t previewBits = bitsFromCSV(web.arg("preview"));
-  broadcastTally(&programBits, &previewBits);
-  web.sendHeader("Location", "/");
-  web.send(301, F("text/plain"), F("OK"));
+uint32_t parseHexColor(String s) {
+  uint32_t color = 0;
+  unsigned char c;
+  for (int i=0; i < s.length(); i++) {
+    c = s[i];
+    color = color << 4;
+    if      (c >= '0' && c <= '9') color += c - '0';
+    else if (c >= 'A' && c <= 'F') color += c - 'A' + 10;
+    else if (c >= 'a' && c <= 'f') color += c - 'a' + 10;
+    // else undefined
+  }
+  return color;
 }
 
-void handleColor() {
-  uint64_t bits = bitsFromCSV(web.arg("i"));
-  uint8_t r = web.arg("r").toInt();
-  uint8_t g = web.arg("g").toInt();
-  uint8_t b = web.arg("b").toInt();
-  broadcastColor(r, g, b, &bits);
-  web.sendHeader("Location", "/");
-  web.send(301, F("text/plain"), F("OK"));
-}
-
-void handleBrightness() {
-  broadcastBrightness(web.arg("id").toInt(), web.arg("brightness").toInt());
-  web.sendHeader("Location", "/");
-  web.send(301, F("text/plain"), F("OK"));
-}
-
-void handleNotFound() {
-  web.send(404, F("text/plain"), F("File Not Found"));
+void handleSet() {
+  String name;
+  bool restart = false;
+  for (int i=0; i<web.args(); i++) {
+    name = web.argName(i);
+    if (name == "color") {
+      uint32_t color = parseHexColor(web.arg(i));
+      uint64_t bits = bitsFromCSV(web.arg("i"));
+      broadcastColor(color, &bits);
+      break;
+    } else if (name == "program") {
+      uint64_t programBits = bitsFromCSV(web.arg(i));
+      uint64_t previewBits = bitsFromCSV(web.arg("preview"));
+      broadcastTally(&programBits, &previewBits);
+      break;
+    } else if (name == "brightness") {
+      uint64_t bits = bitsFromCSV(web.arg("i"));
+      broadcastBrightness(web.arg(i).toInt(), &bits);
+      break;
+    } else if (name == "camid") {
+      uint64_t bits = bitsFromCSV(web.arg("i"));
+      broadcastCamId(web.arg(i).toInt(), &bits);
+      break;
+    } else if (name == "signal") {
+      uint64_t bits = bitsFromCSV(web.arg("i"));
+      broadcastSignal(web.arg(i).toInt(), &bits);
+      break;
+    } else if (name == "atemip") {
+      writeAtemIP(web.arg(i));
+      restart = true;
+      break;
+    }
+  }
+  web.send(200, "text/plain", "OK");
+  delay(10);
+  if (restart) ESP.restart();
 }
 
 void setupWebserver() {
@@ -140,16 +170,11 @@ void setupWebserver() {
   // Initialize the Ethernet connection
   ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER);
   WT32_ETH01_waitForConnect();
-  web.on(F("/"), handleRoot);
-  web.on(F("/test"), handleTest);
-  web.on(F("/tally"), handleTally);
-  web.on(F("/color"), handleColor);
-  web.on(F("/brightness"), handleBrightness);
-  web.onNotFound(handleNotFound);
+  web.on("/", handleRoot);
+  web.on("/set", handleSet);
   web.begin();
 }
 
-void webserverLoop()
-{
+void webserverLoop() {
   web.handleClient();
 }

@@ -43,7 +43,7 @@ you can keep a clear conscience: http://skaarhoj.com/about/licenses/
 #define ATEM_headerCmd_Ack 0x10		// This package is an acknowledge to package id (byte 4-5) ATEM_headerCmd_AckRequest
 
 #define ATEM_maxInitPackageCount 40		// The maximum number of initialization packages. By observation on a 2M/E 4K can be up to (not fixed!) 32. We allocate a f more then...
-#define ATEM_packetBufferLength 96		// Size of packet buffer
+#define ATEM_PACKET_LENGTH 96		// Size of packet buffer
 
 #define ATEM_debug 0				// If "1" (true), more debugging information may hit the serial monitor, in particular when _serialDebug = 0x80. Setting this to "0" is recommended for production environments since it saves on flash memory.
 
@@ -70,7 +70,7 @@ class ATEMbase
 	uint8_t _returnPacketLength;	
 	
 	// ATEM Buffer:
-	uint8_t _packetBuffer[ATEM_packetBufferLength];   		// Buffer for storing segments of the packets from ATEM and creating answer packets.
+	uint8_t _packet[ATEM_PACKET_LENGTH];   		// Buffer for storing segments of the packets from ATEM and creating answer packets.
 
 	uint16_t _cmdLength;				// Used when parsing packets
 	uint16_t _cmdPointer;				// Used when parsing packets

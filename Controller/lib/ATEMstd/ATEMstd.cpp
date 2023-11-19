@@ -452,7 +452,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 		temp = atemTallyByIndexSources;
 #endif
-		atemTallyByIndexSources = word(_packetBuffer[0], _packetBuffer[1]);
+		atemTallyByIndexSources = word(_packet[0], _packet[1]);
 		sources = atemTallyByIndexSources > 64 ? 64 : atemTallyByIndexSources;
 #if ATEM_debug
 		if ((_serialOutput == 0x80 && atemTallyByIndexSources != temp) || (_serialOutput == 0x81 && !hasInitialized()))
@@ -469,7 +469,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemTallyByIndexTallyFlags[a];
 #endif
-			atemTallyByIndexTallyFlags[a] = _packetBuffer[2 + a];
+			atemTallyByIndexTallyFlags[a] = _packet[2 + a];
 			if (atemTallyByIndexTallyFlags[a] & 1) atemTallyProgram |= 1 << a;
 			if (atemTallyByIndexTallyFlags[a] & 2) atemTallyPreview |= 1 << a;
 #if ATEM_debug
@@ -494,13 +494,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("PrgI")))
 	{
 
-		mE = _packetBuffer[0];
+		mE = _packet[0];
 		if (mE <= 1)
 		{
 #if ATEM_debug
 			temp = atemProgramInputVideoSource[mE];
 #endif
-			atemProgramInputVideoSource[mE] = word(_packetBuffer[2], _packetBuffer[3]);
+			atemProgramInputVideoSource[mE] = word(_packet[2], _packet[3]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemProgramInputVideoSource[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -515,13 +515,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("PrvI")))
 	{
 
-		mE = _packetBuffer[0];
+		mE = _packet[0];
 		if (mE <= 1)
 		{
 #if ATEM_debug
 			temp = atemPreviewInputVideoSource[mE];
 #endif
-			atemPreviewInputVideoSource[mE] = word(_packetBuffer[2], _packetBuffer[3]);
+			atemPreviewInputVideoSource[mE] = word(_packet[2], _packet[3]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemPreviewInputVideoSource[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -536,13 +536,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("TrSS")))
 	{
 
-		mE = _packetBuffer[0];
+		mE = _packet[0];
 		if (mE <= 1)
 		{
 #if ATEM_debug
 			temp = atemTransitionStyle[mE];
 #endif
-			atemTransitionStyle[mE] = _packetBuffer[1];
+			atemTransitionStyle[mE] = _packet[1];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemTransitionStyle[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -556,7 +556,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemTransitionNextTransition[mE];
 #endif
-			atemTransitionNextTransition[mE] = _packetBuffer[2];
+			atemTransitionNextTransition[mE] = _packet[2];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemTransitionNextTransition[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -571,13 +571,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("TrPr")))
 	{
 
-		mE = _packetBuffer[0];
+		mE = _packet[0];
 		if (mE <= 1)
 		{
 #if ATEM_debug
 			temp = atemTransitionPreviewEnabled[mE];
 #endif
-			atemTransitionPreviewEnabled[mE] = _packetBuffer[1];
+			atemTransitionPreviewEnabled[mE] = _packet[1];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemTransitionPreviewEnabled[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -592,13 +592,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("TMxP")))
 	{
 
-		mE = _packetBuffer[0];
+		mE = _packet[0];
 		if (mE <= 1)
 		{
 #if ATEM_debug
 			temp = atemTransitionMixRate[mE];
 #endif
-			atemTransitionMixRate[mE] = _packetBuffer[1];
+			atemTransitionMixRate[mE] = _packet[1];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemTransitionMixRate[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -613,14 +613,14 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("KeOn")))
 	{
 
-		mE = _packetBuffer[0];
-		keyer = _packetBuffer[1];
+		mE = _packet[0];
+		keyer = _packet[1];
 		if (mE <= 1 && keyer <= 3)
 		{
 #if ATEM_debug
 			temp = atemKeyerOnAirEnabled[mE][keyer];
 #endif
-			atemKeyerOnAirEnabled[mE][keyer] = _packetBuffer[2];
+			atemKeyerOnAirEnabled[mE][keyer] = _packet[2];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemKeyerOnAirEnabled[mE][keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -637,13 +637,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("DskP")))
 	{
 
-		keyer = _packetBuffer[0];
+		keyer = _packet[0];
 		if (keyer <= 1)
 		{
 #if ATEM_debug
 			temp = atemDownstreamKeyerTie[keyer];
 #endif
-			atemDownstreamKeyerTie[keyer] = _packetBuffer[1];
+			atemDownstreamKeyerTie[keyer] = _packet[1];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerTie[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -657,7 +657,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerRate[keyer];
 #endif
-			atemDownstreamKeyerRate[keyer] = _packetBuffer[2];
+			atemDownstreamKeyerRate[keyer] = _packet[2];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerRate[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -671,7 +671,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerPreMultiplied[keyer];
 #endif
-			atemDownstreamKeyerPreMultiplied[keyer] = _packetBuffer[3];
+			atemDownstreamKeyerPreMultiplied[keyer] = _packet[3];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerPreMultiplied[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -685,7 +685,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerClip[keyer];
 #endif
-			atemDownstreamKeyerClip[keyer] = word(_packetBuffer[4], _packetBuffer[5]);
+			atemDownstreamKeyerClip[keyer] = word(_packet[4], _packet[5]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerClip[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -699,7 +699,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerGain[keyer];
 #endif
-			atemDownstreamKeyerGain[keyer] = word(_packetBuffer[6], _packetBuffer[7]);
+			atemDownstreamKeyerGain[keyer] = word(_packet[6], _packet[7]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerGain[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -713,7 +713,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerInvertKey[keyer];
 #endif
-			atemDownstreamKeyerInvertKey[keyer] = _packetBuffer[8];
+			atemDownstreamKeyerInvertKey[keyer] = _packet[8];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerInvertKey[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -727,7 +727,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerMasked[keyer];
 #endif
-			atemDownstreamKeyerMasked[keyer] = _packetBuffer[9];
+			atemDownstreamKeyerMasked[keyer] = _packet[9];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerMasked[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -741,7 +741,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerTop[keyer];
 #endif
-			atemDownstreamKeyerTop[keyer] = (int16_t)word(_packetBuffer[10], _packetBuffer[11]);
+			atemDownstreamKeyerTop[keyer] = (int16_t)word(_packet[10], _packet[11]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerTop[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -755,7 +755,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerBottom[keyer];
 #endif
-			atemDownstreamKeyerBottom[keyer] = (int16_t)word(_packetBuffer[12], _packetBuffer[13]);
+			atemDownstreamKeyerBottom[keyer] = (int16_t)word(_packet[12], _packet[13]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerBottom[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -769,7 +769,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerLeft[keyer];
 #endif
-			atemDownstreamKeyerLeft[keyer] = (int16_t)word(_packetBuffer[14], _packetBuffer[15]);
+			atemDownstreamKeyerLeft[keyer] = (int16_t)word(_packet[14], _packet[15]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerLeft[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -783,7 +783,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemDownstreamKeyerRight[keyer];
 #endif
-			atemDownstreamKeyerRight[keyer] = (int16_t)word(_packetBuffer[16], _packetBuffer[17]);
+			atemDownstreamKeyerRight[keyer] = (int16_t)word(_packet[16], _packet[17]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemDownstreamKeyerRight[keyer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -798,13 +798,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("FtbS")))
 	{
 
-		mE = _packetBuffer[0];
+		mE = _packet[0];
 		if (mE <= 1)
 		{
 #if ATEM_debug
 			temp = atemFadeToBlackStateFullyBlack[mE];
 #endif
-			atemFadeToBlackStateFullyBlack[mE] = _packetBuffer[1];
+			atemFadeToBlackStateFullyBlack[mE] = _packet[1];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemFadeToBlackStateFullyBlack[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -818,7 +818,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemFadeToBlackStateInTransition[mE];
 #endif
-			atemFadeToBlackStateInTransition[mE] = _packetBuffer[2];
+			atemFadeToBlackStateInTransition[mE] = _packet[2];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemFadeToBlackStateInTransition[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -832,7 +832,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemFadeToBlackStateFramesRemaining[mE];
 #endif
-			atemFadeToBlackStateFramesRemaining[mE] = _packetBuffer[3];
+			atemFadeToBlackStateFramesRemaining[mE] = _packet[3];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemFadeToBlackStateFramesRemaining[mE] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -847,13 +847,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("AuxS")))
 	{
 
-		aUXChannel = _packetBuffer[0];
+		aUXChannel = _packet[0];
 		if (aUXChannel <= 5)
 		{
 #if ATEM_debug
 			temp = atemAuxSourceInput[aUXChannel];
 #endif
-			atemAuxSourceInput[aUXChannel] = word(_packetBuffer[2], _packetBuffer[3]);
+			atemAuxSourceInput[aUXChannel] = word(_packet[2], _packet[3]);
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemAuxSourceInput[aUXChannel] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -868,13 +868,13 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	else if (!strcmp_P(cmdStr, PSTR("MPCE")))
 	{
 
-		mediaPlayer = _packetBuffer[0];
+		mediaPlayer = _packet[0];
 		if (mediaPlayer <= 1)
 		{
 #if ATEM_debug
 			temp = atemMediaPlayerSourceType[mediaPlayer];
 #endif
-			atemMediaPlayerSourceType[mediaPlayer] = _packetBuffer[1];
+			atemMediaPlayerSourceType[mediaPlayer] = _packet[1];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemMediaPlayerSourceType[mediaPlayer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -888,7 +888,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemMediaPlayerSourceStillIndex[mediaPlayer];
 #endif
-			atemMediaPlayerSourceStillIndex[mediaPlayer] = _packetBuffer[2];
+			atemMediaPlayerSourceStillIndex[mediaPlayer] = _packet[2];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemMediaPlayerSourceStillIndex[mediaPlayer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -902,7 +902,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 			temp = atemMediaPlayerSourceClipIndex[mediaPlayer];
 #endif
-			atemMediaPlayerSourceClipIndex[mediaPlayer] = _packetBuffer[3];
+			atemMediaPlayerSourceClipIndex[mediaPlayer] = _packet[3];
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemMediaPlayerSourceClipIndex[mediaPlayer] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{
@@ -916,19 +916,19 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 	}
 	else if (!strcmp_P(cmdStr, PSTR("_pin")))
 	{
-		if (_packetBuffer[5] == 'T')
+		if (_packet[5] == 'T')
 		{
 			_ATEMmodel = 0;
 		}
-		else if (_packetBuffer[5] == '1')
+		else if (_packet[5] == '1')
 		{
-			_ATEMmodel = _packetBuffer[29] == '4' ? 4 : 1;
+			_ATEMmodel = _packet[29] == '4' ? 4 : 1;
 		}
-		else if (_packetBuffer[5] == '2')
+		else if (_packet[5] == '2')
 		{
-			_ATEMmodel = _packetBuffer[29] == '4' ? 5 : 2;
+			_ATEMmodel = _packet[29] == '4' ? 5 : 2;
 		}
-		else if (_packetBuffer[5] == 'P')
+		else if (_packet[5] == 'P')
 		{
 			_ATEMmodel = 3;
 		}
@@ -968,7 +968,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 		temp = atemProtocolVersionMajor;
 #endif
-		atemProtocolVersionMajor = word(_packetBuffer[0], _packetBuffer[1]);
+		atemProtocolVersionMajor = word(_packet[0], _packet[1]);
 #if ATEM_debug
 		if ((_serialOutput == 0x80 && atemProtocolVersionMajor != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 		{
@@ -980,7 +980,7 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 #if ATEM_debug
 		temp = atemProtocolVersionMinor;
 #endif
-		atemProtocolVersionMinor = word(_packetBuffer[2], _packetBuffer[3]);
+		atemProtocolVersionMinor = word(_packet[2], _packet[3]);
 #if ATEM_debug
 		if ((_serialOutput == 0x80 && atemProtocolVersionMinor != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 		{
@@ -1035,7 +1035,7 @@ uint8_t ATEMstd::getVideoModeFormat()
 void ATEMstd::setVideoModeFormat(uint8_t format)
 {
 	_prepareCommandPacket(PSTR("CVdM"), 4);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = format;
+	_packet[12 + _cBBO + 4 + 4 + 0] = format;
 	_finishCommandPacket();
 }
 
@@ -1055,10 +1055,10 @@ uint16_t ATEMstd::getProgramInputVideoSource(uint8_t mE)
  */
 void ATEMstd::setProgramInputVideoSource(uint8_t mE, uint16_t videoSource)
 {
-	_prepareCommandPacket(PSTR("CPgI"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == mE));
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(videoSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(videoSource);
+	_prepareCommandPacket(PSTR("CPgI"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == mE));
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(videoSource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(videoSource);
 	_finishCommandPacket();
 }
 
@@ -1078,10 +1078,10 @@ uint16_t ATEMstd::getPreviewInputVideoSource(uint8_t mE)
  */
 void ATEMstd::setPreviewInputVideoSource(uint8_t mE, uint16_t videoSource)
 {
-	_prepareCommandPacket(PSTR("CPvI"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == mE));
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(videoSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(videoSource);
+	_prepareCommandPacket(PSTR("CPvI"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == mE));
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(videoSource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(videoSource);
 	_finishCommandPacket();
 }
 
@@ -1092,7 +1092,7 @@ void ATEMstd::setPreviewInputVideoSource(uint8_t mE, uint16_t videoSource)
 void ATEMstd::performCutME(uint8_t mE)
 {
 	_prepareCommandPacket(PSTR("DCut"), 4);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
 	_finishCommandPacket();
 }
 
@@ -1103,7 +1103,7 @@ void ATEMstd::performCutME(uint8_t mE)
 void ATEMstd::performAutoME(uint8_t mE)
 {
 	_prepareCommandPacket(PSTR("DAut"), 4);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
 	_finishCommandPacket();
 }
 
@@ -1132,11 +1132,11 @@ uint8_t ATEMstd::getTransitionNextTransition(uint8_t mE)
  */
 void ATEMstd::setTransitionStyle(uint8_t mE, uint8_t style)
 {
-	_prepareCommandPacket(PSTR("CTTp"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE));
+	_prepareCommandPacket(PSTR("CTTp"), 4, (_packet[12 + _cBBO + 4 + 4 + 1] == mE));
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = style;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 2] = style;
 	_finishCommandPacket();
 }
 
@@ -1147,11 +1147,11 @@ void ATEMstd::setTransitionStyle(uint8_t mE, uint8_t style)
  */
 void ATEMstd::setTransitionNextTransition(uint8_t mE, uint8_t nextTransition)
 {
-	_prepareCommandPacket(PSTR("CTTp"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE));
+	_prepareCommandPacket(PSTR("CTTp"), 4, (_packet[12 + _cBBO + 4 + 4 + 1] == mE));
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = nextTransition;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 3] = nextTransition;
 	_finishCommandPacket();
 }
 
@@ -1171,9 +1171,9 @@ bool ATEMstd::getTransitionPreviewEnabled(uint8_t mE)
  */
 void ATEMstd::setTransitionPreviewEnabled(uint8_t mE, bool enabled)
 {
-	_prepareCommandPacket(PSTR("CTPr"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == mE));
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = enabled;
+	_prepareCommandPacket(PSTR("CTPr"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == mE));
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = enabled;
 	_finishCommandPacket();
 }
 
@@ -1211,10 +1211,10 @@ uint16_t ATEMstd::getTransitionPosition(uint8_t mE)
  */
 void ATEMstd::setTransitionPosition(uint8_t mE, uint16_t position)
 {
-	_prepareCommandPacket(PSTR("CTPs"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == mE));
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(position);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(position);
+	_prepareCommandPacket(PSTR("CTPs"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == mE));
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(position);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(position);
 	_finishCommandPacket();
 }
 
@@ -1234,9 +1234,9 @@ uint8_t ATEMstd::getTransitionMixRate(uint8_t mE)
  */
 void ATEMstd::setTransitionMixRate(uint8_t mE, uint8_t rate)
 {
-	_prepareCommandPacket(PSTR("CTMx"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == mE));
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = rate;
+	_prepareCommandPacket(PSTR("CTMx"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == mE));
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = rate;
 	_finishCommandPacket();
 }
 
@@ -1247,11 +1247,11 @@ void ATEMstd::setTransitionMixRate(uint8_t mE, uint8_t rate)
  */
 void ATEMstd::setTransitionWipeRate(uint8_t mE, uint8_t rate)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 1;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = rate;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 3] = rate;
 	_finishCommandPacket();
 }
 
@@ -1262,11 +1262,11 @@ void ATEMstd::setTransitionWipeRate(uint8_t mE, uint8_t rate)
  */
 void ATEMstd::setTransitionWipePattern(uint8_t mE, uint8_t pattern)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 2;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = pattern;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = pattern;
 	_finishCommandPacket();
 }
 
@@ -1277,12 +1277,12 @@ void ATEMstd::setTransitionWipePattern(uint8_t mE, uint8_t pattern)
  */
 void ATEMstd::setTransitionWipeWidth(uint8_t mE, uint16_t width)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 4;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(width);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(width);
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(width);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(width);
 	_finishCommandPacket();
 }
 
@@ -1293,12 +1293,12 @@ void ATEMstd::setTransitionWipeWidth(uint8_t mE, uint16_t width)
  */
 void ATEMstd::setTransitionWipeFillSource(uint8_t mE, uint16_t fillSource)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 8
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 8;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 8] = highByte(fillSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 9] = lowByte(fillSource);
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 8] = highByte(fillSource);
+	_packet[12 + _cBBO + 4 + 4 + 9] = lowByte(fillSource);
 	_finishCommandPacket();
 }
 
@@ -1309,12 +1309,12 @@ void ATEMstd::setTransitionWipeFillSource(uint8_t mE, uint16_t fillSource)
  */
 void ATEMstd::setTransitionWipeSymmetry(uint8_t mE, uint16_t symmetry)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 16
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 16;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 10] = highByte(symmetry);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 11] = lowByte(symmetry);
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 16;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 10] = highByte(symmetry);
+	_packet[12 + _cBBO + 4 + 4 + 11] = lowByte(symmetry);
 	_finishCommandPacket();
 }
 
@@ -1325,12 +1325,12 @@ void ATEMstd::setTransitionWipeSymmetry(uint8_t mE, uint16_t symmetry)
  */
 void ATEMstd::setTransitionWipeSoftness(uint8_t mE, uint16_t softness)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 32
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 32;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 12] = highByte(softness);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 13] = lowByte(softness);
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 32;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 12] = highByte(softness);
+	_packet[12 + _cBBO + 4 + 4 + 13] = lowByte(softness);
 	_finishCommandPacket();
 }
 
@@ -1341,12 +1341,12 @@ void ATEMstd::setTransitionWipeSoftness(uint8_t mE, uint16_t softness)
  */
 void ATEMstd::setTransitionWipePositionX(uint8_t mE, uint16_t positionX)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 64
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 64;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 14] = highByte(positionX);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 15] = lowByte(positionX);
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 64;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 14] = highByte(positionX);
+	_packet[12 + _cBBO + 4 + 4 + 15] = lowByte(positionX);
 	_finishCommandPacket();
 }
 
@@ -1357,12 +1357,12 @@ void ATEMstd::setTransitionWipePositionX(uint8_t mE, uint16_t positionX)
  */
 void ATEMstd::setTransitionWipePositionY(uint8_t mE, uint16_t positionY)
 {
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 	// Set Mask: 128
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 128;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 16] = highByte(positionY);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 17] = lowByte(positionY);
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 128;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 16] = highByte(positionY);
+	_packet[12 + _cBBO + 4 + 4 + 17] = lowByte(positionY);
 	_finishCommandPacket();
 }
 
@@ -1374,14 +1374,14 @@ void ATEMstd::setTransitionWipePositionY(uint8_t mE, uint16_t positionY)
 void ATEMstd::setTransitionWipeReverse(uint8_t mE, bool reverse)
 {
 
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 
 	// Set Mask: 256
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 18] = reverse;
+	_packet[12 + _cBBO + 4 + 4 + 18] = reverse;
 
 	_finishCommandPacket();
 }
@@ -1394,14 +1394,14 @@ void ATEMstd::setTransitionWipeReverse(uint8_t mE, bool reverse)
 void ATEMstd::setTransitionWipeFlipFlop(uint8_t mE, bool flipFlop)
 {
 
-	_prepareCommandPacket(PSTR("CTWp"), 20, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == mE));
+	_prepareCommandPacket(PSTR("CTWp"), 20, (_packet[12 + _cBBO + 4 + 4 + 2] == mE));
 
 	// Set Mask: 512
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 2] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 19] = flipFlop;
+	_packet[12 + _cBBO + 4 + 4 + 19] = flipFlop;
 
 	_finishCommandPacket();
 }
@@ -1425,13 +1425,13 @@ bool ATEMstd::getKeyerOnAirEnabled(uint8_t mE, uint8_t keyer)
 void ATEMstd::setKeyerOnAirEnabled(uint8_t mE, uint8_t keyer, bool enabled)
 {
 
-	_prepareCommandPacket(PSTR("CKOn"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CKOn"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == mE) && (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = enabled;
+	_packet[12 + _cBBO + 4 + 4 + 2] = enabled;
 
 	_finishCommandPacket();
 }
@@ -1445,16 +1445,16 @@ void ATEMstd::setKeyerOnAirEnabled(uint8_t mE, uint8_t keyer, bool enabled)
 void ATEMstd::setKeyerMasked(uint8_t mE, uint8_t keyer, bool masked)
 {
 
-	_prepareCommandPacket(PSTR("CKMs"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKMs"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = masked;
+	_packet[12 + _cBBO + 4 + 4 + 3] = masked;
 
 	_finishCommandPacket();
 }
@@ -1468,17 +1468,17 @@ void ATEMstd::setKeyerMasked(uint8_t mE, uint8_t keyer, bool masked)
 void ATEMstd::setKeyerTop(uint8_t mE, uint8_t keyer, int16_t top)
 {
 
-	_prepareCommandPacket(PSTR("CKMs"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKMs"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = highByte(top);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = lowByte(top);
+	_packet[12 + _cBBO + 4 + 4 + 4] = highByte(top);
+	_packet[12 + _cBBO + 4 + 4 + 5] = lowByte(top);
 
 	_finishCommandPacket();
 }
@@ -1492,17 +1492,17 @@ void ATEMstd::setKeyerTop(uint8_t mE, uint8_t keyer, int16_t top)
 void ATEMstd::setKeyerBottom(uint8_t mE, uint8_t keyer, int16_t bottom)
 {
 
-	_prepareCommandPacket(PSTR("CKMs"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKMs"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(bottom);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(bottom);
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(bottom);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(bottom);
 
 	_finishCommandPacket();
 }
@@ -1516,17 +1516,17 @@ void ATEMstd::setKeyerBottom(uint8_t mE, uint8_t keyer, int16_t bottom)
 void ATEMstd::setKeyerLeft(uint8_t mE, uint8_t keyer, int16_t left)
 {
 
-	_prepareCommandPacket(PSTR("CKMs"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKMs"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 8
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 8] = highByte(left);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 9] = lowByte(left);
+	_packet[12 + _cBBO + 4 + 4 + 8] = highByte(left);
+	_packet[12 + _cBBO + 4 + 4 + 9] = lowByte(left);
 
 	_finishCommandPacket();
 }
@@ -1540,17 +1540,17 @@ void ATEMstd::setKeyerLeft(uint8_t mE, uint8_t keyer, int16_t left)
 void ATEMstd::setKeyerRight(uint8_t mE, uint8_t keyer, int16_t right)
 {
 
-	_prepareCommandPacket(PSTR("CKMs"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKMs"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 16
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 16;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 16;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 10] = highByte(right);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 11] = lowByte(right);
+	_packet[12 + _cBBO + 4 + 4 + 10] = highByte(right);
+	_packet[12 + _cBBO + 4 + 4 + 11] = lowByte(right);
 
 	_finishCommandPacket();
 }
@@ -1564,14 +1564,14 @@ void ATEMstd::setKeyerRight(uint8_t mE, uint8_t keyer, int16_t right)
 void ATEMstd::setKeyerFillSource(uint8_t mE, uint8_t keyer, uint16_t fillSource)
 {
 
-	_prepareCommandPacket(PSTR("CKeF"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CKeF"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == mE) && (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(fillSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(fillSource);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(fillSource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(fillSource);
 
 	_finishCommandPacket();
 }
@@ -1585,16 +1585,16 @@ void ATEMstd::setKeyerFillSource(uint8_t mE, uint8_t keyer, uint16_t fillSource)
 void ATEMstd::setKeyLumaPreMultiplied(uint8_t mE, uint8_t keyer, bool preMultiplied)
 {
 
-	_prepareCommandPacket(PSTR("CKLm"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKLm"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = preMultiplied;
+	_packet[12 + _cBBO + 4 + 4 + 3] = preMultiplied;
 
 	_finishCommandPacket();
 }
@@ -1608,17 +1608,17 @@ void ATEMstd::setKeyLumaPreMultiplied(uint8_t mE, uint8_t keyer, bool preMultipl
 void ATEMstd::setKeyLumaClip(uint8_t mE, uint8_t keyer, uint16_t clip)
 {
 
-	_prepareCommandPacket(PSTR("CKLm"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKLm"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = highByte(clip);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = lowByte(clip);
+	_packet[12 + _cBBO + 4 + 4 + 4] = highByte(clip);
+	_packet[12 + _cBBO + 4 + 4 + 5] = lowByte(clip);
 
 	_finishCommandPacket();
 }
@@ -1632,17 +1632,17 @@ void ATEMstd::setKeyLumaClip(uint8_t mE, uint8_t keyer, uint16_t clip)
 void ATEMstd::setKeyLumaGain(uint8_t mE, uint8_t keyer, uint16_t gain)
 {
 
-	_prepareCommandPacket(PSTR("CKLm"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKLm"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(gain);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(gain);
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(gain);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(gain);
 
 	_finishCommandPacket();
 }
@@ -1656,16 +1656,16 @@ void ATEMstd::setKeyLumaGain(uint8_t mE, uint8_t keyer, uint16_t gain)
 void ATEMstd::setKeyLumaInvertKey(uint8_t mE, uint8_t keyer, bool invertKey)
 {
 
-	_prepareCommandPacket(PSTR("CKLm"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("CKLm"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 8
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 8] = invertKey;
+	_packet[12 + _cBBO + 4 + 4 + 8] = invertKey;
 
 	_finishCommandPacket();
 }
@@ -1679,19 +1679,19 @@ void ATEMstd::setKeyLumaInvertKey(uint8_t mE, uint8_t keyer, bool invertKey)
 void ATEMstd::setKeyDVESizeX(uint8_t mE, uint8_t keyer, int32_t sizeX)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 8] = (int32_t)((sizeX >> 24) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 9] = (int32_t)((sizeX >> 16) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 10] = (int32_t)((sizeX >> 8) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 11] = (int32_t)(sizeX & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 8] = (int32_t)((sizeX >> 24) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 9] = (int32_t)((sizeX >> 16) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 10] = (int32_t)((sizeX >> 8) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 11] = (int32_t)(sizeX & 0xFF);
 
 	_finishCommandPacket();
 }
@@ -1705,19 +1705,19 @@ void ATEMstd::setKeyDVESizeX(uint8_t mE, uint8_t keyer, int32_t sizeX)
 void ATEMstd::setKeyDVESizeY(uint8_t mE, uint8_t keyer, int32_t sizeY)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 12] = (int32_t)((sizeY >> 24) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 13] = (int32_t)((sizeY >> 16) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 14] = (int32_t)((sizeY >> 8) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 15] = (int32_t)(sizeY & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 12] = (int32_t)((sizeY >> 24) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 13] = (int32_t)((sizeY >> 16) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 14] = (int32_t)((sizeY >> 8) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 15] = (int32_t)(sizeY & 0xFF);
 
 	_finishCommandPacket();
 }
@@ -1731,19 +1731,19 @@ void ATEMstd::setKeyDVESizeY(uint8_t mE, uint8_t keyer, int32_t sizeY)
 void ATEMstd::setKeyDVEPositionX(uint8_t mE, uint8_t keyer, int32_t positionX)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 16] = (int32_t)((positionX >> 24) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 17] = (int32_t)((positionX >> 16) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 18] = (int32_t)((positionX >> 8) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 19] = (int32_t)(positionX & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 16] = (int32_t)((positionX >> 24) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 17] = (int32_t)((positionX >> 16) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 18] = (int32_t)((positionX >> 8) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 19] = (int32_t)(positionX & 0xFF);
 
 	_finishCommandPacket();
 }
@@ -1757,19 +1757,19 @@ void ATEMstd::setKeyDVEPositionX(uint8_t mE, uint8_t keyer, int32_t positionX)
 void ATEMstd::setKeyDVEPositionY(uint8_t mE, uint8_t keyer, int32_t positionY)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 8
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 20] = (int32_t)((positionY >> 24) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 21] = (int32_t)((positionY >> 16) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 22] = (int32_t)((positionY >> 8) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 23] = (int32_t)(positionY & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 20] = (int32_t)((positionY >> 24) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 21] = (int32_t)((positionY >> 16) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 22] = (int32_t)((positionY >> 8) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 23] = (int32_t)(positionY & 0xFF);
 
 	_finishCommandPacket();
 }
@@ -1783,19 +1783,19 @@ void ATEMstd::setKeyDVEPositionY(uint8_t mE, uint8_t keyer, int32_t positionY)
 void ATEMstd::setKeyDVERotation(uint8_t mE, uint8_t keyer, int32_t rotation)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 16
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 16;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 16;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 24] = (int32_t)((rotation >> 24) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 25] = (int32_t)((rotation >> 16) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 26] = (int32_t)((rotation >> 8) & 0xFF);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 27] = (int32_t)(rotation & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 24] = (int32_t)((rotation >> 24) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 25] = (int32_t)((rotation >> 16) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 26] = (int32_t)((rotation >> 8) & 0xFF);
+	_packet[12 + _cBBO + 4 + 4 + 27] = (int32_t)(rotation & 0xFF);
 
 	_finishCommandPacket();
 }
@@ -1809,16 +1809,16 @@ void ATEMstd::setKeyDVERotation(uint8_t mE, uint8_t keyer, int32_t rotation)
 void ATEMstd::setKeyDVEBorderEnabled(uint8_t mE, uint8_t keyer, bool borderEnabled)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 32
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 32;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 32;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 28] = borderEnabled;
+	_packet[12 + _cBBO + 4 + 4 + 28] = borderEnabled;
 
 	_finishCommandPacket();
 }
@@ -1832,16 +1832,16 @@ void ATEMstd::setKeyDVEBorderEnabled(uint8_t mE, uint8_t keyer, bool borderEnabl
 void ATEMstd::setKeyDVEShadow(uint8_t mE, uint8_t keyer, bool shadow)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 64
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 64;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 64;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 29] = shadow;
+	_packet[12 + _cBBO + 4 + 4 + 29] = shadow;
 
 	_finishCommandPacket();
 }
@@ -1855,16 +1855,16 @@ void ATEMstd::setKeyDVEShadow(uint8_t mE, uint8_t keyer, bool shadow)
 void ATEMstd::setKeyDVEBorderBevel(uint8_t mE, uint8_t keyer, uint8_t borderBevel)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 128
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] |= 128;
+	_packet[12 + _cBBO + 4 + 4 + 3] |= 128;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 30] = borderBevel;
+	_packet[12 + _cBBO + 4 + 4 + 30] = borderBevel;
 
 	_finishCommandPacket();
 }
@@ -1878,17 +1878,17 @@ void ATEMstd::setKeyDVEBorderBevel(uint8_t mE, uint8_t keyer, uint8_t borderBeve
 void ATEMstd::setKeyDVEBorderOuterWidth(uint8_t mE, uint8_t keyer, uint16_t borderOuterWidth)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 256
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 32] = highByte(borderOuterWidth);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 33] = lowByte(borderOuterWidth);
+	_packet[12 + _cBBO + 4 + 4 + 32] = highByte(borderOuterWidth);
+	_packet[12 + _cBBO + 4 + 4 + 33] = lowByte(borderOuterWidth);
 
 	_finishCommandPacket();
 }
@@ -1902,17 +1902,17 @@ void ATEMstd::setKeyDVEBorderOuterWidth(uint8_t mE, uint8_t keyer, uint16_t bord
 void ATEMstd::setKeyDVEBorderInnerWidth(uint8_t mE, uint8_t keyer, uint16_t borderInnerWidth)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 512
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 34] = highByte(borderInnerWidth);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 35] = lowByte(borderInnerWidth);
+	_packet[12 + _cBBO + 4 + 4 + 34] = highByte(borderInnerWidth);
+	_packet[12 + _cBBO + 4 + 4 + 35] = lowByte(borderInnerWidth);
 
 	_finishCommandPacket();
 }
@@ -1926,16 +1926,16 @@ void ATEMstd::setKeyDVEBorderInnerWidth(uint8_t mE, uint8_t keyer, uint16_t bord
 void ATEMstd::setKeyDVEBorderOuterSoftness(uint8_t mE, uint8_t keyer, uint8_t borderOuterSoftness)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 1024
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 36] = borderOuterSoftness;
+	_packet[12 + _cBBO + 4 + 4 + 36] = borderOuterSoftness;
 
 	_finishCommandPacket();
 }
@@ -1949,16 +1949,16 @@ void ATEMstd::setKeyDVEBorderOuterSoftness(uint8_t mE, uint8_t keyer, uint8_t bo
 void ATEMstd::setKeyDVEBorderInnerSoftness(uint8_t mE, uint8_t keyer, uint8_t borderInnerSoftness)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 2048
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 37] = borderInnerSoftness;
+	_packet[12 + _cBBO + 4 + 4 + 37] = borderInnerSoftness;
 
 	_finishCommandPacket();
 }
@@ -1972,16 +1972,16 @@ void ATEMstd::setKeyDVEBorderInnerSoftness(uint8_t mE, uint8_t keyer, uint8_t bo
 void ATEMstd::setKeyDVEBorderBevelSoftness(uint8_t mE, uint8_t keyer, uint8_t borderBevelSoftness)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 4096
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 16;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 16;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 38] = borderBevelSoftness;
+	_packet[12 + _cBBO + 4 + 4 + 38] = borderBevelSoftness;
 
 	_finishCommandPacket();
 }
@@ -1995,16 +1995,16 @@ void ATEMstd::setKeyDVEBorderBevelSoftness(uint8_t mE, uint8_t keyer, uint8_t bo
 void ATEMstd::setKeyDVEBorderBevelPosition(uint8_t mE, uint8_t keyer, uint8_t borderBevelPosition)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 8192
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 32;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 32;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 39] = borderBevelPosition;
+	_packet[12 + _cBBO + 4 + 4 + 39] = borderBevelPosition;
 
 	_finishCommandPacket();
 }
@@ -2018,16 +2018,16 @@ void ATEMstd::setKeyDVEBorderBevelPosition(uint8_t mE, uint8_t keyer, uint8_t bo
 void ATEMstd::setKeyDVEBorderOpacity(uint8_t mE, uint8_t keyer, uint8_t borderOpacity)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 16384
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 64;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 64;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 40] = borderOpacity;
+	_packet[12 + _cBBO + 4 + 4 + 40] = borderOpacity;
 
 	_finishCommandPacket();
 }
@@ -2041,17 +2041,17 @@ void ATEMstd::setKeyDVEBorderOpacity(uint8_t mE, uint8_t keyer, uint8_t borderOp
 void ATEMstd::setKeyDVEBorderHue(uint8_t mE, uint8_t keyer, uint16_t borderHue)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 32768
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] |= 128;
+	_packet[12 + _cBBO + 4 + 4 + 2] |= 128;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 42] = highByte(borderHue);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 43] = lowByte(borderHue);
+	_packet[12 + _cBBO + 4 + 4 + 42] = highByte(borderHue);
+	_packet[12 + _cBBO + 4 + 4 + 43] = lowByte(borderHue);
 
 	_finishCommandPacket();
 }
@@ -2065,17 +2065,17 @@ void ATEMstd::setKeyDVEBorderHue(uint8_t mE, uint8_t keyer, uint16_t borderHue)
 void ATEMstd::setKeyDVEBorderSaturation(uint8_t mE, uint8_t keyer, uint16_t borderSaturation)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 65536
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 44] = highByte(borderSaturation);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 45] = lowByte(borderSaturation);
+	_packet[12 + _cBBO + 4 + 4 + 44] = highByte(borderSaturation);
+	_packet[12 + _cBBO + 4 + 4 + 45] = lowByte(borderSaturation);
 
 	_finishCommandPacket();
 }
@@ -2089,17 +2089,17 @@ void ATEMstd::setKeyDVEBorderSaturation(uint8_t mE, uint8_t keyer, uint16_t bord
 void ATEMstd::setKeyDVEBorderLuma(uint8_t mE, uint8_t keyer, uint16_t borderLuma)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 131072
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 46] = highByte(borderLuma);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 47] = lowByte(borderLuma);
+	_packet[12 + _cBBO + 4 + 4 + 46] = highByte(borderLuma);
+	_packet[12 + _cBBO + 4 + 4 + 47] = lowByte(borderLuma);
 
 	_finishCommandPacket();
 }
@@ -2113,17 +2113,17 @@ void ATEMstd::setKeyDVEBorderLuma(uint8_t mE, uint8_t keyer, uint16_t borderLuma
 void ATEMstd::setKeyDVELightSourceDirection(uint8_t mE, uint8_t keyer, uint16_t lightSourceDirection)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 262144
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 48] = highByte(lightSourceDirection);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 49] = lowByte(lightSourceDirection);
+	_packet[12 + _cBBO + 4 + 4 + 48] = highByte(lightSourceDirection);
+	_packet[12 + _cBBO + 4 + 4 + 49] = lowByte(lightSourceDirection);
 
 	_finishCommandPacket();
 }
@@ -2137,16 +2137,16 @@ void ATEMstd::setKeyDVELightSourceDirection(uint8_t mE, uint8_t keyer, uint16_t 
 void ATEMstd::setKeyDVELightSourceAltitude(uint8_t mE, uint8_t keyer, uint8_t lightSourceAltitude)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 524288
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 50] = lightSourceAltitude;
+	_packet[12 + _cBBO + 4 + 4 + 50] = lightSourceAltitude;
 
 	_finishCommandPacket();
 }
@@ -2160,16 +2160,16 @@ void ATEMstd::setKeyDVELightSourceAltitude(uint8_t mE, uint8_t keyer, uint8_t li
 void ATEMstd::setKeyDVEMasked(uint8_t mE, uint8_t keyer, bool masked)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 1048576
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 16;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 16;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 51] = masked;
+	_packet[12 + _cBBO + 4 + 4 + 51] = masked;
 
 	_finishCommandPacket();
 }
@@ -2183,17 +2183,17 @@ void ATEMstd::setKeyDVEMasked(uint8_t mE, uint8_t keyer, bool masked)
 void ATEMstd::setKeyDVETop(uint8_t mE, uint8_t keyer, int16_t top)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 2097152
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 32;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 32;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 52] = highByte(top);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 53] = lowByte(top);
+	_packet[12 + _cBBO + 4 + 4 + 52] = highByte(top);
+	_packet[12 + _cBBO + 4 + 4 + 53] = lowByte(top);
 
 	_finishCommandPacket();
 }
@@ -2207,17 +2207,17 @@ void ATEMstd::setKeyDVETop(uint8_t mE, uint8_t keyer, int16_t top)
 void ATEMstd::setKeyDVEBottom(uint8_t mE, uint8_t keyer, int16_t bottom)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 4194304
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 64;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 64;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 54] = highByte(bottom);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 55] = lowByte(bottom);
+	_packet[12 + _cBBO + 4 + 4 + 54] = highByte(bottom);
+	_packet[12 + _cBBO + 4 + 4 + 55] = lowByte(bottom);
 
 	_finishCommandPacket();
 }
@@ -2231,17 +2231,17 @@ void ATEMstd::setKeyDVEBottom(uint8_t mE, uint8_t keyer, int16_t bottom)
 void ATEMstd::setKeyDVELeft(uint8_t mE, uint8_t keyer, int16_t left)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 8388608
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] |= 128;
+	_packet[12 + _cBBO + 4 + 4 + 1] |= 128;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 56] = highByte(left);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 57] = lowByte(left);
+	_packet[12 + _cBBO + 4 + 4 + 56] = highByte(left);
+	_packet[12 + _cBBO + 4 + 4 + 57] = lowByte(left);
 
 	_finishCommandPacket();
 }
@@ -2255,17 +2255,17 @@ void ATEMstd::setKeyDVELeft(uint8_t mE, uint8_t keyer, int16_t left)
 void ATEMstd::setKeyDVERight(uint8_t mE, uint8_t keyer, int16_t right)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 16777216
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 58] = highByte(right);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 59] = lowByte(right);
+	_packet[12 + _cBBO + 4 + 4 + 58] = highByte(right);
+	_packet[12 + _cBBO + 4 + 4 + 59] = lowByte(right);
 
 	_finishCommandPacket();
 }
@@ -2279,16 +2279,16 @@ void ATEMstd::setKeyDVERight(uint8_t mE, uint8_t keyer, int16_t right)
 void ATEMstd::setKeyDVERate(uint8_t mE, uint8_t keyer, uint8_t rate)
 {
 
-	_prepareCommandPacket(PSTR("CKDV"), 64, (_packetBuffer[12 + _cBBO + 4 + 4 + 4] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 5] == keyer));
+	_prepareCommandPacket(PSTR("CKDV"), 64, (_packet[12 + _cBBO + 4 + 4 + 4] == mE) && (_packet[12 + _cBBO + 4 + 4 + 5] == keyer));
 
 	// Set Mask: 33554432
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 5] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 60] = rate;
+	_packet[12 + _cBBO + 4 + 4 + 60] = rate;
 
 	_finishCommandPacket();
 }
@@ -2302,13 +2302,13 @@ void ATEMstd::setKeyDVERate(uint8_t mE, uint8_t keyer, uint8_t rate)
 void ATEMstd::setRunFlyingKeyKeyFrame(uint8_t mE, uint8_t keyer, uint8_t keyFrame)
 {
 
-	_prepareCommandPacket(PSTR("RFlK"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("RFlK"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = keyFrame;
+	_packet[12 + _cBBO + 4 + 4 + 4] = keyFrame;
 
 	_finishCommandPacket();
 }
@@ -2322,16 +2322,16 @@ void ATEMstd::setRunFlyingKeyKeyFrame(uint8_t mE, uint8_t keyer, uint8_t keyFram
 void ATEMstd::setRunFlyingKeyRuntoInfiniteindex(uint8_t mE, uint8_t keyer, uint8_t runtoInfiniteindex)
 {
 
-	_prepareCommandPacket(PSTR("RFlK"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE) && (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == keyer));
+	_prepareCommandPacket(PSTR("RFlK"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mE) && (_packet[12 + _cBBO + 4 + 4 + 2] == keyer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 2] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = runtoInfiniteindex;
+	_packet[12 + _cBBO + 4 + 4 + 5] = runtoInfiniteindex;
 
 	_finishCommandPacket();
 }
@@ -2344,12 +2344,12 @@ void ATEMstd::setRunFlyingKeyRuntoInfiniteindex(uint8_t mE, uint8_t keyer, uint8
 void ATEMstd::setDownstreamKeyerFillSource(uint8_t keyer, uint16_t fillSource)
 {
 
-	_prepareCommandPacket(PSTR("CDsF"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == keyer));
+	_prepareCommandPacket(PSTR("CDsF"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == keyer));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 0] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(fillSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(fillSource);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(fillSource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(fillSource);
 
 	_finishCommandPacket();
 }
@@ -2362,12 +2362,12 @@ void ATEMstd::setDownstreamKeyerFillSource(uint8_t keyer, uint16_t fillSource)
 void ATEMstd::setDownstreamKeyerKeySource(uint8_t keyer, uint16_t keySource)
 {
 
-	_prepareCommandPacket(PSTR("CDsC"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == keyer));
+	_prepareCommandPacket(PSTR("CDsC"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == keyer));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 0] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(keySource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(keySource);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(keySource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(keySource);
 
 	_finishCommandPacket();
 }
@@ -2479,11 +2479,11 @@ int16_t ATEMstd::getDownstreamKeyerRight(uint8_t keyer)
 void ATEMstd::setDownstreamKeyerTie(uint8_t keyer, bool tie)
 {
 
-	_prepareCommandPacket(PSTR("CDsT"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == keyer));
+	_prepareCommandPacket(PSTR("CDsT"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == keyer));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 0] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = tie;
+	_packet[12 + _cBBO + 4 + 4 + 1] = tie;
 
 	_finishCommandPacket();
 }
@@ -2496,14 +2496,14 @@ void ATEMstd::setDownstreamKeyerTie(uint8_t keyer, bool tie)
 void ATEMstd::setDownstreamKeyerPreMultiplied(uint8_t keyer, bool preMultiplied)
 {
 
-	_prepareCommandPacket(PSTR("CDsG"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsG"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = preMultiplied;
+	_packet[12 + _cBBO + 4 + 4 + 2] = preMultiplied;
 
 	_finishCommandPacket();
 }
@@ -2516,15 +2516,15 @@ void ATEMstd::setDownstreamKeyerPreMultiplied(uint8_t keyer, bool preMultiplied)
 void ATEMstd::setDownstreamKeyerClip(uint8_t keyer, uint16_t clip)
 {
 
-	_prepareCommandPacket(PSTR("CDsG"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsG"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = highByte(clip);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = lowByte(clip);
+	_packet[12 + _cBBO + 4 + 4 + 4] = highByte(clip);
+	_packet[12 + _cBBO + 4 + 4 + 5] = lowByte(clip);
 
 	_finishCommandPacket();
 }
@@ -2537,15 +2537,15 @@ void ATEMstd::setDownstreamKeyerClip(uint8_t keyer, uint16_t clip)
 void ATEMstd::setDownstreamKeyerGain(uint8_t keyer, uint16_t gain)
 {
 
-	_prepareCommandPacket(PSTR("CDsG"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsG"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(gain);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(gain);
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(gain);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(gain);
 
 	_finishCommandPacket();
 }
@@ -2558,14 +2558,14 @@ void ATEMstd::setDownstreamKeyerGain(uint8_t keyer, uint16_t gain)
 void ATEMstd::setDownstreamKeyerInvertKey(uint8_t keyer, bool invertKey)
 {
 
-	_prepareCommandPacket(PSTR("CDsG"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsG"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 8
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 8] = invertKey;
+	_packet[12 + _cBBO + 4 + 4 + 8] = invertKey;
 
 	_finishCommandPacket();
 }
@@ -2578,14 +2578,14 @@ void ATEMstd::setDownstreamKeyerInvertKey(uint8_t keyer, bool invertKey)
 void ATEMstd::setDownstreamKeyerMasked(uint8_t keyer, bool masked)
 {
 
-	_prepareCommandPacket(PSTR("CDsM"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsM"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = masked;
+	_packet[12 + _cBBO + 4 + 4 + 2] = masked;
 
 	_finishCommandPacket();
 }
@@ -2598,15 +2598,15 @@ void ATEMstd::setDownstreamKeyerMasked(uint8_t keyer, bool masked)
 void ATEMstd::setDownstreamKeyerTop(uint8_t keyer, int16_t top)
 {
 
-	_prepareCommandPacket(PSTR("CDsM"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsM"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = highByte(top);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = lowByte(top);
+	_packet[12 + _cBBO + 4 + 4 + 4] = highByte(top);
+	_packet[12 + _cBBO + 4 + 4 + 5] = lowByte(top);
 
 	_finishCommandPacket();
 }
@@ -2619,15 +2619,15 @@ void ATEMstd::setDownstreamKeyerTop(uint8_t keyer, int16_t top)
 void ATEMstd::setDownstreamKeyerBottom(uint8_t keyer, int16_t bottom)
 {
 
-	_prepareCommandPacket(PSTR("CDsM"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsM"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(bottom);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(bottom);
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(bottom);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(bottom);
 
 	_finishCommandPacket();
 }
@@ -2640,15 +2640,15 @@ void ATEMstd::setDownstreamKeyerBottom(uint8_t keyer, int16_t bottom)
 void ATEMstd::setDownstreamKeyerLeft(uint8_t keyer, int16_t left)
 {
 
-	_prepareCommandPacket(PSTR("CDsM"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsM"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 8
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 8] = highByte(left);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 9] = lowByte(left);
+	_packet[12 + _cBBO + 4 + 4 + 8] = highByte(left);
+	_packet[12 + _cBBO + 4 + 4 + 9] = lowByte(left);
 
 	_finishCommandPacket();
 }
@@ -2661,15 +2661,15 @@ void ATEMstd::setDownstreamKeyerLeft(uint8_t keyer, int16_t left)
 void ATEMstd::setDownstreamKeyerRight(uint8_t keyer, int16_t right)
 {
 
-	_prepareCommandPacket(PSTR("CDsM"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == keyer));
+	_prepareCommandPacket(PSTR("CDsM"), 12, (_packet[12 + _cBBO + 4 + 4 + 1] == keyer));
 
 	// Set Mask: 16
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 16;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 16;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 10] = highByte(right);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 11] = lowByte(right);
+	_packet[12 + _cBBO + 4 + 4 + 10] = highByte(right);
+	_packet[12 + _cBBO + 4 + 4 + 11] = lowByte(right);
 
 	_finishCommandPacket();
 }
@@ -2683,7 +2683,7 @@ void ATEMstd::performDownstreamKeyerAutoKeyer(uint8_t keyer)
 
 	_prepareCommandPacket(PSTR("DDsA"), 4);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 0] = keyer;
 
 	_finishCommandPacket();
 }
@@ -2732,11 +2732,11 @@ uint8_t ATEMstd::getDownstreamKeyerFramesRemaining(uint8_t keyer)
 void ATEMstd::setDownstreamKeyerOnAir(uint8_t keyer, bool onAir)
 {
 
-	_prepareCommandPacket(PSTR("CDsL"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == keyer));
+	_prepareCommandPacket(PSTR("CDsL"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == keyer));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = keyer;
+	_packet[12 + _cBBO + 4 + 4 + 0] = keyer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = onAir;
+	_packet[12 + _cBBO + 4 + 4 + 1] = onAir;
 
 	_finishCommandPacket();
 }
@@ -2758,14 +2758,14 @@ uint8_t ATEMstd::getFadeToBlackRate(uint8_t mE)
 void ATEMstd::setFadeToBlackRate(uint8_t mE, uint8_t rate)
 {
 
-	_prepareCommandPacket(PSTR("FtbC"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mE));
+	_prepareCommandPacket(PSTR("FtbC"), 4, (_packet[12 + _cBBO + 4 + 4 + 1] == mE));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mE;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = rate;
+	_packet[12 + _cBBO + 4 + 4 + 2] = rate;
 
 	_finishCommandPacket();
 }
@@ -2806,8 +2806,8 @@ void ATEMstd::performFadeToBlackME(uint8_t mE)
 
 	_prepareCommandPacket(PSTR("FtbA"), 4);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = mE;
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = 0x02;
+	_packet[12 + _cBBO + 4 + 4 + 0] = mE;
+	_packet[12 + _cBBO + 4 + 4 + 1] = 0x02;
 
 	_finishCommandPacket();
 }
@@ -2820,15 +2820,15 @@ void ATEMstd::performFadeToBlackME(uint8_t mE)
 void ATEMstd::setColorGeneratorHue(uint8_t colorGenerator, uint16_t hue)
 {
 
-	_prepareCommandPacket(PSTR("CClV"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == colorGenerator));
+	_prepareCommandPacket(PSTR("CClV"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == colorGenerator));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = colorGenerator;
+	_packet[12 + _cBBO + 4 + 4 + 1] = colorGenerator;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(hue);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(hue);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(hue);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(hue);
 
 	_finishCommandPacket();
 }
@@ -2841,15 +2841,15 @@ void ATEMstd::setColorGeneratorHue(uint8_t colorGenerator, uint16_t hue)
 void ATEMstd::setColorGeneratorSaturation(uint8_t colorGenerator, uint16_t saturation)
 {
 
-	_prepareCommandPacket(PSTR("CClV"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == colorGenerator));
+	_prepareCommandPacket(PSTR("CClV"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == colorGenerator));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = colorGenerator;
+	_packet[12 + _cBBO + 4 + 4 + 1] = colorGenerator;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = highByte(saturation);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 5] = lowByte(saturation);
+	_packet[12 + _cBBO + 4 + 4 + 4] = highByte(saturation);
+	_packet[12 + _cBBO + 4 + 4 + 5] = lowByte(saturation);
 
 	_finishCommandPacket();
 }
@@ -2862,15 +2862,15 @@ void ATEMstd::setColorGeneratorSaturation(uint8_t colorGenerator, uint16_t satur
 void ATEMstd::setColorGeneratorLuma(uint8_t colorGenerator, uint16_t luma)
 {
 
-	_prepareCommandPacket(PSTR("CClV"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == colorGenerator));
+	_prepareCommandPacket(PSTR("CClV"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == colorGenerator));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = colorGenerator;
+	_packet[12 + _cBBO + 4 + 4 + 1] = colorGenerator;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(luma);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(luma);
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(luma);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(luma);
 
 	_finishCommandPacket();
 }
@@ -2892,15 +2892,15 @@ uint16_t ATEMstd::getAuxSourceInput(uint8_t aUXChannel)
 void ATEMstd::setAuxSourceInput(uint8_t aUXChannel, uint16_t input)
 {
 
-	_prepareCommandPacket(PSTR("CAuS"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == aUXChannel));
+	_prepareCommandPacket(PSTR("CAuS"), 4, (_packet[12 + _cBBO + 4 + 4 + 1] == aUXChannel));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = aUXChannel;
+	_packet[12 + _cBBO + 4 + 4 + 1] = aUXChannel;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(input);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(input);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(input);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(input);
 
 	_finishCommandPacket();
 }
@@ -2913,14 +2913,14 @@ void ATEMstd::setAuxSourceInput(uint8_t aUXChannel, uint16_t input)
 void ATEMstd::setClipPlayerPlaying(uint8_t mediaPlayer, bool playing)
 {
 
-	_prepareCommandPacket(PSTR("SCPS"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
+	_prepareCommandPacket(PSTR("SCPS"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = playing;
+	_packet[12 + _cBBO + 4 + 4 + 2] = playing;
 
 	_finishCommandPacket();
 }
@@ -2933,14 +2933,14 @@ void ATEMstd::setClipPlayerPlaying(uint8_t mediaPlayer, bool playing)
 void ATEMstd::setClipPlayerLoop(uint8_t mediaPlayer, bool loop)
 {
 
-	_prepareCommandPacket(PSTR("SCPS"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
+	_prepareCommandPacket(PSTR("SCPS"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = loop;
+	_packet[12 + _cBBO + 4 + 4 + 3] = loop;
 
 	_finishCommandPacket();
 }
@@ -2953,14 +2953,14 @@ void ATEMstd::setClipPlayerLoop(uint8_t mediaPlayer, bool loop)
 void ATEMstd::setClipPlayerAtBeginning(uint8_t mediaPlayer, bool atBeginning)
 {
 
-	_prepareCommandPacket(PSTR("SCPS"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
+	_prepareCommandPacket(PSTR("SCPS"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = atBeginning;
+	_packet[12 + _cBBO + 4 + 4 + 4] = atBeginning;
 
 	_finishCommandPacket();
 }
@@ -2973,15 +2973,15 @@ void ATEMstd::setClipPlayerAtBeginning(uint8_t mediaPlayer, bool atBeginning)
 void ATEMstd::setClipPlayerClipFrame(uint8_t mediaPlayer, uint16_t clipFrame)
 {
 
-	_prepareCommandPacket(PSTR("SCPS"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
+	_prepareCommandPacket(PSTR("SCPS"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
 
 	// Set Mask: 8
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 8;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 8;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(clipFrame);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(clipFrame);
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(clipFrame);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(clipFrame);
 
 	_finishCommandPacket();
 }
@@ -3021,14 +3021,14 @@ uint8_t ATEMstd::getMediaPlayerSourceClipIndex(uint8_t mediaPlayer)
 void ATEMstd::setMediaPlayerSourceType(uint8_t mediaPlayer, uint8_t type)
 {
 
-	_prepareCommandPacket(PSTR("MPSS"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
+	_prepareCommandPacket(PSTR("MPSS"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = type;
+	_packet[12 + _cBBO + 4 + 4 + 2] = type;
 
 	_finishCommandPacket();
 }
@@ -3041,14 +3041,14 @@ void ATEMstd::setMediaPlayerSourceType(uint8_t mediaPlayer, uint8_t type)
 void ATEMstd::setMediaPlayerSourceStillIndex(uint8_t mediaPlayer, uint8_t stillIndex)
 {
 
-	_prepareCommandPacket(PSTR("MPSS"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
+	_prepareCommandPacket(PSTR("MPSS"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = stillIndex;
+	_packet[12 + _cBBO + 4 + 4 + 3] = stillIndex;
 
 	_finishCommandPacket();
 }
@@ -3061,14 +3061,14 @@ void ATEMstd::setMediaPlayerSourceStillIndex(uint8_t mediaPlayer, uint8_t stillI
 void ATEMstd::setMediaPlayerSourceClipIndex(uint8_t mediaPlayer, uint8_t clipIndex)
 {
 
-	_prepareCommandPacket(PSTR("MPSS"), 8, (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
+	_prepareCommandPacket(PSTR("MPSS"), 8, (_packet[12 + _cBBO + 4 + 4 + 1] == mediaPlayer));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
+	_packet[12 + _cBBO + 4 + 4 + 1] = mediaPlayer;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = clipIndex;
+	_packet[12 + _cBBO + 4 + 4 + 4] = clipIndex;
 
 	_finishCommandPacket();
 }
@@ -3105,12 +3105,12 @@ uint16_t ATEMstd::getMacroRunStatusIndex()
 void ATEMstd::setMacroAction(uint16_t index, uint8_t action)
 {
 
-	_prepareCommandPacket(PSTR("MAct"), 4, (_packetBuffer[12 + _cBBO + 4 + 4 + 0] == highByte(index)) && (_packetBuffer[12 + _cBBO + 4 + 4 + 1] == lowByte(index)));
+	_prepareCommandPacket(PSTR("MAct"), 4, (_packet[12 + _cBBO + 4 + 4 + 0] == highByte(index)) && (_packet[12 + _cBBO + 4 + 4 + 1] == lowByte(index)));
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = highByte(index);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 1] = lowByte(index);
+	_packet[12 + _cBBO + 4 + 4 + 0] = highByte(index);
+	_packet[12 + _cBBO + 4 + 4 + 1] = lowByte(index);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = action;
+	_packet[12 + _cBBO + 4 + 4 + 2] = action;
 
 	_finishCommandPacket();
 }
@@ -3142,8 +3142,8 @@ void ATEMstd::setMacroAddPauseFrames(uint16_t frames)
 
 	_prepareCommandPacket(PSTR("MSlp"), 4);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(frames);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(frames);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(frames);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(frames);
 
 	_finishCommandPacket();
 }
@@ -3199,15 +3199,15 @@ int16_t ATEMstd::getAudioMixerInputBalance(uint16_t audioSource)
 void ATEMstd::setAudioMixerInputMixOption(uint16_t audioSource, uint8_t mixOption)
 {
 
-	_prepareCommandPacket(PSTR("CAMI"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == highByte(audioSource)) && (_packetBuffer[12 + _cBBO + 4 + 4 + 3] == lowByte(audioSource)));
+	_prepareCommandPacket(PSTR("CAMI"), 12, (_packet[12 + _cBBO + 4 + 4 + 2] == highByte(audioSource)) && (_packet[12 + _cBBO + 4 + 4 + 3] == lowByte(audioSource)));
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(audioSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(audioSource);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(audioSource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(audioSource);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 4] = mixOption;
+	_packet[12 + _cBBO + 4 + 4 + 4] = mixOption;
 
 	_finishCommandPacket();
 }
@@ -3220,16 +3220,16 @@ void ATEMstd::setAudioMixerInputMixOption(uint16_t audioSource, uint8_t mixOptio
 void ATEMstd::setAudioMixerInputVolume(uint16_t audioSource, uint16_t volume)
 {
 
-	_prepareCommandPacket(PSTR("CAMI"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == highByte(audioSource)) && (_packetBuffer[12 + _cBBO + 4 + 4 + 3] == lowByte(audioSource)));
+	_prepareCommandPacket(PSTR("CAMI"), 12, (_packet[12 + _cBBO + 4 + 4 + 2] == highByte(audioSource)) && (_packet[12 + _cBBO + 4 + 4 + 3] == lowByte(audioSource)));
 
 	// Set Mask: 2
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 2;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 2;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(audioSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(audioSource);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(audioSource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(audioSource);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 6] = highByte(volume);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 7] = lowByte(volume);
+	_packet[12 + _cBBO + 4 + 4 + 6] = highByte(volume);
+	_packet[12 + _cBBO + 4 + 4 + 7] = lowByte(volume);
 
 	_finishCommandPacket();
 }
@@ -3242,16 +3242,16 @@ void ATEMstd::setAudioMixerInputVolume(uint16_t audioSource, uint16_t volume)
 void ATEMstd::setAudioMixerInputBalance(uint16_t audioSource, int16_t balance)
 {
 
-	_prepareCommandPacket(PSTR("CAMI"), 12, (_packetBuffer[12 + _cBBO + 4 + 4 + 2] == highByte(audioSource)) && (_packetBuffer[12 + _cBBO + 4 + 4 + 3] == lowByte(audioSource)));
+	_prepareCommandPacket(PSTR("CAMI"), 12, (_packet[12 + _cBBO + 4 + 4 + 2] == highByte(audioSource)) && (_packet[12 + _cBBO + 4 + 4 + 3] == lowByte(audioSource)));
 
 	// Set Mask: 4
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 4;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 4;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(audioSource);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(audioSource);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(audioSource);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(audioSource);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 8] = highByte(balance);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 9] = lowByte(balance);
+	_packet[12 + _cBBO + 4 + 4 + 8] = highByte(balance);
+	_packet[12 + _cBBO + 4 + 4 + 9] = lowByte(balance);
 
 	_finishCommandPacket();
 }
@@ -3266,10 +3266,10 @@ void ATEMstd::setAudioMixerMasterVolume(uint16_t volume)
 	_prepareCommandPacket(PSTR("CAMM"), 8);
 
 	// Set Mask: 1
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] |= 1;
+	_packet[12 + _cBBO + 4 + 4 + 0] |= 1;
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 2] = highByte(volume);
-	_packetBuffer[12 + _cBBO + 4 + 4 + 3] = lowByte(volume);
+	_packet[12 + _cBBO + 4 + 4 + 2] = highByte(volume);
+	_packet[12 + _cBBO + 4 + 4 + 3] = lowByte(volume);
 
 	_finishCommandPacket();
 }
@@ -3283,7 +3283,7 @@ void ATEMstd::setAudioLevelsEnable(bool enable)
 
 	_prepareCommandPacket(PSTR("SALN"), 4);
 
-	_packetBuffer[12 + _cBBO + 4 + 4 + 0] = enable;
+	_packet[12 + _cBBO + 4 + 4 + 0] = enable;
 
 	_finishCommandPacket();
 }
