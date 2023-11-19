@@ -1,3 +1,3 @@
 # TODO
-- button for changing camId
-- fade out after longer period without packet from controller
+- list of seen tallies
+- relay tally info, when requester not in range

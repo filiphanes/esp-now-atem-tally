@@ -31,39 +31,51 @@ void broadcastTally(uint64_t *program, uint64_t *preview) {
   payload[0] = SET_TALLY;
   memcpy(payload+1, program, sizeof(uint64_t));
   memcpy(payload+1+sizeof(uint64_t), preview, sizeof(uint64_t));
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload));
+  esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
-}
-
-void broadcastTest(int pgm, int pvw) {
-  uint64_t program = 0;
-  uint64_t preview = 0;
-  program = program | (1 << pgm-1);
-  preview = preview | (1 << pvw-1);
-  broadcastTally(&program, &preview);
 }
 
 void switchCamId(uint8_t id1, uint8_t id2) {
   uint8_t payload[3] = {SWITCH_CAMID, id1, id2};
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload));
+  esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
-void broadcastBrightness(uint8_t id, uint8_t brightness) {
-  uint8_t payload[3] {SET_BRIGHTNESS, id, brightness};
-  if (!esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload))) {
+void broadcastBrightness(uint8_t brightness, uint64_t *bits) {
+  uint8_t payload[2+sizeof(uint64_t)];
+  payload[0] = SET_BRIGHTNESS;
+  payload[1] = brightness;
+  memcpy(payload+2, bits, sizeof(bits));
+  if (!esp_now_send(broadcastAddress, payload, sizeof(payload))) {
     Serial.println("esp_now_send != OK");
   }
 }
 
-void broadcastColor(uint8_t r, uint8_t g, uint8_t b, uint64_t *bits) {
+void broadcastCamId(uint8_t camId, uint64_t *bits) {
+  uint8_t payload[2+sizeof(uint64_t)];
+  payload[0] = SET_CAMID;
+  payload[1] = camId;
+  memcpy(payload+2, bits, sizeof(bits));
+  esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
+  if (result != ESP_OK) Serial.println("esp_now_send != OK");
+}
+
+void broadcastColor(uint32_t color, uint64_t *bits) {
   uint8_t payload[4+sizeof(uint64_t)];
   payload[0] = SET_COLOR;
-  payload[1] = r;
-  payload[2] = g;
-  payload[3] = b;
+  payload[1] = (color >> 16) & 0xFF;
+  payload[2] = (color >> 8) & 0xFF;
+  payload[3] = color & 0xFF;
   memcpy(payload+4, bits, sizeof(bits));
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&payload, sizeof(payload));
+  esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
+  if (result != ESP_OK) Serial.println("esp_now_send != OK");
+}
+
+void broadcastSignal(uint8_t signal, uint64_t *bits) {
+  uint8_t payload[1+sizeof(uint64_t)];
+  payload[0] = signal;  // Signal number is command number
+  memcpy(payload+1, bits, sizeof(uint64_t));
+  esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 

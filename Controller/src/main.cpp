@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ATEMbase.h>
 #include <ATEMstd.h>
+#include <mdns.h>
 
 #include "memory.h"
 #include "espNow.h"
@@ -46,6 +47,13 @@ void setup() {
   setupWebserver();
   Serial.println("setupEspNow");
   setupEspNow();
+  
+  if (esp_err_t err = mdns_init()) {
+      Serial.printf("MDNS Init failed: %d\n", err);
+  }
+  mdns_hostname_set("tally");
+  mdns_instance_name_set("Tally bridge");
+  mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
 
   Serial.println("setupAtemConnection");
   AtemSwitcher.begin(atemIP);
