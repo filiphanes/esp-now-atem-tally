@@ -95,15 +95,16 @@ void handleRoot() {
 
 uint64_t bitsFromCSV(String s) {
   uint64_t bits = 0;
-  int number;
-  size_t startPos = 0;
-  for (size_t i = 0; i <= s.length(); ++i) {
-    if (i == s.length() || s[i] == ',') {
-      number = s.substring(startPos, i - startPos).toInt();
+  int number = 0;
+  for (size_t i = 0; i < s.length(); ++i) {
+    if (s[i] >= '0' && s[i] <= '9') {
+      number = 10*number + s[i] - '0';
+    } else if (number > 0) {
       bits |= 1 << (number-1);
-      startPos = i + 1;
+      number = 0;
     }
   }
+  if (number > 0) bits |= 1 << (number-1);
   return bits;
 }
 
