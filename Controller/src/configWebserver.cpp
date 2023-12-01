@@ -1,9 +1,7 @@
 #include "configWebserver.h"
 #include <WebServer_WT32_ETH01.h>
-#include "main.h"
-#include "constants.h"
+#include "atem.h"
 #include "espNow.h"
-#include "memory.h"
 #include "main.h"
 
 WebServer web(80);
@@ -55,9 +53,10 @@ void handleRoot() {
     + getATEMInputs() + getTalliesHTML() +
     "<button onclick=\"selNone()\">None</button>"
     "<button onclick=\"selAll()\">All</button>"
-    "<button onclick=\"color(0xff0000)\">Red</button>"
-    "<button onclick=\"color(0x00ff00)\">Green</button>"
-    "<button onclick=\"color(0x0000ff)\">Blue</button><br/>"
+    "<button onclick=\"color(0xFF0000)\">Red</button>"
+    "<button onclick=\"color(0x00FF00)\">Green</button>"
+    "<button onclick=\"color(0x0000FF)\">Blue</button><br/>"
+    "<button onclick=\"color(0xFFFFFF)\">White</button><br/>"
     "<button onclick=\"signal(12)\">Change</button>"
     "<button onclick=\"signal(13)\">Left</button>"
     "<button onclick=\"signal(14)\">Down</button>"
@@ -74,7 +73,7 @@ void handleRoot() {
     "<input type=\"number\" name=\"brightness\" placeholder=\"brightness\"/>"
     "<button onclick=\"brightness()\">Set brightness</button><br>"
     "<form method=\"post\" enctype=\"application/x-www-form-urlencoded\">"
-      "<input type=\"text\" name=\"atemip\" value=\"" + atemIP.toString() + "\"><br>"
+      "<input type=\"text\" name=\"atemip\" value=\"" + config.atemIP.toString() + "\"><br>"
       "<input type=\"submit\" value=\"Set ATEM IP\">"
     "</form>"
     "<script>"
@@ -124,7 +123,7 @@ uint32_t parseHexColor(String s) {
 
 void handleSet() {
   String name;
-  bool restart = false;
+  bool configUpdated = false;
   for (int i=0; i<web.args(); i++) {
     name = web.argName(i);
     if (name == "color") {
@@ -150,14 +149,28 @@ void handleSet() {
       broadcastSignal(web.arg(i).toInt(), &bits);
       break;
     } else if (name == "atemip") {
-      writeAtemIP(web.arg(i));
-      restart = true;
-      break;
+      config.atemIP.fromString(web.arg(i));
+      configUpdated = true;
+    } else if (name == "atemenable") {
+      config.atemEnabled = (bool) web.arg(i).toInt();
+      configUpdated = true;
+    } else if (name == "obsip") {
+      config.obsIP.fromString(web.arg(i));
+      configUpdated = true;
+    } else if (name == "obsport") {
+      config.obsPort = web.arg(i).toInt();
+      configUpdated = true;
+    } else if (name == "obsenable") {
+      config.obsEnabled = (bool) web.arg(i).toInt();
+      configUpdated = true;
     }
   }
   web.send(200, "text/plain", "OK");
   delay(10);
-  if (restart) ESP.restart();
+  if (configUpdated) {
+    writeConfig();
+    ESP.restart();
+  }
 }
 
 void setupWebserver() {
