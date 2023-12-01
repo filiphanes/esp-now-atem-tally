@@ -5,8 +5,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-#include "constants.h"
-#include "main.h"
+#include "atem.h"
 
 #define MAX_TALLY_COUNT 64
 

@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <esp_now.h>
-#include "constants.h"
 
 enum enum_command : uint8_t {
   SET_TALLY = 1,

@@ -318,12 +318,20 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   }
 
   case SET_CAMID: {
+    uint64_t *bits_p = (uint64_t *)(data+1);
+    if (getBit(*bits_p, camId-1)) {
+      camId = data[1];
+      Serial.printf("SET_CAMID %d\n", camId);
+      writeCamId();
+    }
+    /*
     uint8_t mac[6];
     esp_wifi_get_mac(WIFI_IF_STA, mac);
     if (memcmp(mac, (uint8_t*) (data + sizeof(enum_command)), 6) == 0) {
       camId = data[7];
       Serial.printf("SET_CAMID %d\n", camId);
     }
+    */
     lastMessageReceived = millis();
     break;
   }
