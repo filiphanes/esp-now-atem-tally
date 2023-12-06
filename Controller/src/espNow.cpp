@@ -123,7 +123,7 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
 
 void setupEspNow()
 {
-  Serial.println("Init ESP-NOW");
+  Serial.println("SetupEspNow");
   WiFi.mode(WIFI_STA);
   // config long range mode
   int a = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);

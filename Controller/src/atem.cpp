@@ -25,6 +25,8 @@ uint64_t getPreviewBits()
 }
 
 void setupATEM() {
+  Serial.print("setupATEM IP:");
+  Serial.println(config.atemIP);
   AtemSwitcher.begin(config.atemIP);
   AtemSwitcher.serialOutput(1);
   AtemSwitcher.connect();

@@ -33,6 +33,10 @@ String getTalliesHTML() {
   return s;
 }
 
+IPAddress asIp(uint32_t i) {
+  return IPAddress(i);
+}
+
 void handleRoot() {
   web.send(200, "text/html", "<html>"
     "<head>"
@@ -72,10 +76,8 @@ void handleRoot() {
     "<button onclick=\"camId()\">Set camId</button><br/>"
     "<input type=\"number\" name=\"brightness\" placeholder=\"brightness\"/>"
     "<button onclick=\"brightness()\">Set brightness</button><br>"
-    "<form method=\"post\" enctype=\"application/x-www-form-urlencoded\">"
-      "<input type=\"text\" name=\"atemip\" value=\"" + config.atemIP.toString() + "\"><br>"
-      "<input type=\"submit\" value=\"Set ATEM IP\">"
-    "</form>"
+    "<input type=\"text\" name=\"atemip\" value=\"" + asIp(config.atemIP) + "\"/>"
+    "<button onclick=\"atemIP()\">Set ATEM IP</button><br>"
     "<script>"
       "const all_i = document.querySelectorAll('i');"
       "all_i.forEach((e) => { e.addEventListener('click', () => { e.classList.toggle('sel')}) });"
@@ -86,7 +88,8 @@ void handleRoot() {
       "function brightness() { const b = document.querySelector(\"input[name='brightness']\").value; post(`/set?brightness=${b}&i=${inputs()}`) };"
       "function color(c) { post(`/set?color=${c.toString(16)}&i=${inputs()}`) };"
       "function signal(n) { post(`/set?signal=${n}&i=${inputs()}`) };"
-      "function camId() { const camId = document.querySelector(\"input[name='camId']\").value; post(`/set?camid=${camId}&i=${inputs()}`) };"
+      "function atemIP() {post(`/set?atemip=${document.querySelector(\"input[name='atemip']\").value}`) };"
+      "function camId() {post(`/set?camid=${document.querySelector(\"input[name='camId']\").value}&i=${inputs()}`) };"
     "</script>"
     "</body>"
     "</html>");
@@ -123,6 +126,7 @@ uint32_t parseHexColor(String s) {
 
 void handleSet() {
   String name;
+  IPAddress ip;
   bool configUpdated = false;
   for (int i=0; i<web.args(); i++) {
     name = web.argName(i);
@@ -148,20 +152,19 @@ void handleSet() {
       uint64_t bits = bitsFromCSV(web.arg("i"));
       broadcastSignal(web.arg(i).toInt(), &bits);
       break;
-    } else if (name == "atemip") {
-      config.atemIP.fromString(web.arg(i));
+    } else if (name == "protocol") {
+      config.protocol = (uint8_t) web.arg(i).toInt();
       configUpdated = true;
-    } else if (name == "atemenable") {
-      config.atemEnabled = (bool) web.arg(i).toInt();
+    } else if (name == "atemip") {
+      ip.fromString(web.arg(i));
+      config.atemIP = (uint32_t) ip;
       configUpdated = true;
     } else if (name == "obsip") {
-      config.obsIP.fromString(web.arg(i));
+      ip.fromString(web.arg(i));
+      config.obsIP = (uint32_t) ip;
       configUpdated = true;
     } else if (name == "obsport") {
       config.obsPort = web.arg(i).toInt();
-      configUpdated = true;
-    } else if (name == "obsenable") {
-      config.obsEnabled = (bool) web.arg(i).toInt();
       configUpdated = true;
     }
   }
