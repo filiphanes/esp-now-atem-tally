@@ -3,12 +3,13 @@
 #include <Arduino.h>
 
 struct controller_config {
-    IPAddress atemIP = IPAddress(0,0,0,0);
+    // 1 = atem
+    // 2 = obs
+    uint8_t protocol = 1;
+    uint32_t atemIP = (192<<24)+(168<<16)+(2<<8)+240;
     uint16_t atemPort = 9910;
-    bool atemEnabled = true;
-    IPAddress obsIP = IPAddress(0,0,0,0);
+    uint32_t obsIP = (192<<24)+(168<<16)+(2<<8)+24;
     uint16_t obsPort = 4455;
-    bool obsEnabled = true;
 };
 
 extern struct controller_config config;

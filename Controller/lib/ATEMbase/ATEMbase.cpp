@@ -41,21 +41,15 @@ void ATEMbase::begin(const IPAddress ip)
 }
 void ATEMbase::begin(const IPAddress ip, const uint16_t localPort)
 {
-
 	neverConnected = true;
 	waitingForIncoming = false;
-
 	// Set up Udp communication object:
 	WiFiUDP Udp;
-
 	_Udp = Udp;
-
 	_switcherIP = ip;		// Set switcher IP address
 	_localPort = localPort; // Set default local port
-
 	_lastContact = 0;
 	_serialOutput = 0;
-
 	resetCommandBundle();
 }
 
@@ -82,9 +76,7 @@ void ATEMbase::connect(const boolean useFixedPortNumber)
 	memset(_missedInitializationPackages, 0xFF, (ATEM_maxInitPackageCount + 7) / 8);
 	_initPayloadSentAtPacketId = ATEM_maxInitPackageCount; // The max value it can be
 	uint16_t portNumber = useFixedPortNumber ? _localPort : random(50100, 65300);
-
 	_Udp.begin(portNumber);
-
 	// Send connectString to ATEM:
 	if (_serialOutput)
 	{
@@ -93,12 +85,10 @@ void ATEMbase::connect(const boolean useFixedPortNumber)
 		Serial.print(F(" from port "));
 		Serial.println(portNumber);
 	}
-
 	_wipeCleanPacketBuffer();
 	_createCommandHeader(ATEM_headerCmd_HelloPacket, 12 + 8);
 	_packet[12] = 0x01; // This seems to be what the client should send upon first request.
 	_packet[9] = 0x3a;	// This seems to be what the client should send upon first request.
-
 	_sendPacketBuffer(20);
 }
 

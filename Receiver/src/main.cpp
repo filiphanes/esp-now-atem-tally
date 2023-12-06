@@ -308,7 +308,7 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   }
 
   case SET_BRIGHTNESS: {
-    uint64_t *bits_p = (uint64_t *)(data+1);
+    uint64_t *bits_p = (uint64_t *)(data+2);
     uint64_t brightness = data[1];
     if (getBit(*bits_p, camId-1)) {
       strip.setBrightness(brightness);
@@ -318,11 +318,13 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   }
 
   case SET_CAMID: {
-    uint64_t *bits_p = (uint64_t *)(data+1);
+    uint64_t *bits_p = (uint64_t *)(data+2);
     if (getBit(*bits_p, camId-1)) {
       camId = data[1];
-      Serial.printf("SET_CAMID %d\n", camId);
       writeCamId();
+      displayNumber(0, 0, 255, camId);
+      Serial.printf("SET_CAMID %d\n", camId);
+      delay(1000);  // so new number is visible
     }
     /*
     uint8_t mac[6];
@@ -354,7 +356,6 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   case GET_TALLY:
     Serial.println("GET_TALLY");
     break;
-
   }
 }
 
