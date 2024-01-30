@@ -6,6 +6,7 @@
 
 #include "ArduinoJson.h"
 #include "main.h"
+#include "memory.h"
 
-void setupOBS();
-void obsLoop();
+void obs_setup();
+void obs_loop();

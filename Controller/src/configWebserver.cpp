@@ -40,56 +40,71 @@ IPAddress asIp(uint32_t i) {
 void handleRoot() {
   web.send(200, "text/html", "<html>"
     "<head>"
-      "<title>Tally bridge config</title>"
+      "<title>Tally bridge</title>"
       "<style>"
-        "body { background-color: black; color: #e6e5df; margin: 1rem; }"
-        "form { display: flex; flex-direction: column; margin: 2rem 0; }"
-        "input { max-width: 10rem; }"
-        "button { margin: 0 0 .5rem 0; }"
-        "i { padding: .3rem 0 0; width: 1.5rem; height: 1.5rem; text-align:center; display: inline-block; font-style: normal; border: 1px solid black; cursor: pointer; }"
-        "i.pgm { background: red; color: black; }"
-        "i.pvw { background: green; color: black; }"
-        "i:hover { border-color: gray; }"
-        "i.sel { border-color: yellow; }"
+        "body{background-color: #101010; color: #e6e5df; margin: 1rem;}"
+        "form{display: flex; flex-direction: column; margin: 2rem 0;}"
+        "input{max-width:8rem; background:#000; border:0; padding:.5rem; margin:0 .5rem 0 0; color:#d0d0d0;}"
+        "button{line-height: 2.5rem; text-align: center; margin: 0 .3rem .3rem 0; width: 2.5rem; background: #333; color: #FFF; border: 0; border-radius: .5rem;}"
+        "button:hover{background:#777;}"
+        "button.set{width:auto; padding: 0 .7rem;line-height:2rem;}"
+        "i{line-height: 2.5rem; width: 2.5rem; text-align: center; display: inline-block; font-style: normal; cursor: pointer; background: #333; border-radius: .5rem; margin: 0 .3rem .3rem 0; vertical-align: middle;}"
+        "i.pgm{background: red; color: black;}"
+        "i.pvw{background: green; color: black;}"
+        "i:hover{background: #777;}"
+        "i.sel{background: #222; border: 1px solid orange;}"
       "</style>"
     "</head>"
     "<body>"
-    + getATEMInputs() + getTalliesHTML() +
-    "<button onclick=\"selNone()\">None</button>"
-    "<button onclick=\"selAll()\">All</button>"
-    "<button onclick=\"color(0xFF0000)\">Red</button>"
-    "<button onclick=\"color(0x00FF00)\">Green</button>"
-    "<button onclick=\"color(0x0000FF)\">Blue</button><br/>"
-    "<button onclick=\"color(0xFFFFFF)\">White</button><br/>"
-    "<button onclick=\"signal(12)\">Change</button>"
-    "<button onclick=\"signal(13)\">Left</button>"
-    "<button onclick=\"signal(14)\">Down</button>"
-    "<button onclick=\"signal(15)\">Up</button>"
-    "<button onclick=\"signal(16)\">Right</button>"
-    "<button onclick=\"signal(17)\">Focus</button>"
-    "<button onclick=\"signal(18)\">DeFocus</button>"
-    "<button onclick=\"signal(19)\">ZoomIn</button>"
-    "<button onclick=\"signal(20)\">ZoomOut</button>"
-    "<button onclick=\"signal(21)\">ISO+</button>"
-    "<button onclick=\"signal(22)\">ISO-</button><br/>"
-    "<input type=\"number\" name=\"camId\" placeholder=\"camId\"/>"
-    "<button onclick=\"camId()\">Set camId</button><br/>"
-    "<input type=\"number\" name=\"brightness\" placeholder=\"brightness\"/>"
-    "<button onclick=\"brightness()\">Set brightness</button><br>"
-    "<input type=\"text\" name=\"atemip\" value=\"" + asIp(config.atemIP) + "\"/>"
-    "<button onclick=\"atemIP()\">Set ATEM IP</button><br>"
+    "<button onclick='color(0xFF0000)' style='color:red;'>&#9632;</button>"
+    "<button onclick='color(0x00FF00)' style='color:green;'>&#9632;</button>"
+    "<button onclick='color(0x0000FF)' style='color:blue;'>&#9632;</button>"
+    "<button onclick='color(0xFFFF00)' style='color:yellow;'>&#9632;</button>"
+    "<button onclick='color(0xFFFFFF)' style='color:white;'>&#9632;</button>"
+    "<br/>"
+    "<button onclick='signal(12)'>&times;</button>"
+    "<button onclick='signal(13)'>&leftarrow;</button>"
+    "<button onclick='signal(14)'>&downarrow;</button>"
+    "<button onclick='signal(15)'>&uparrow;</button>"
+    "<button onclick='signal(16)'>&rightarrow;</button>"
+    "<button onclick='signal(17)'>F</button>"
+    "<button onclick='signal(18)'>B</button>"
+    "<button onclick='signal(19)'>Z</button>"
+    "<button onclick='signal(20)'>&#9761;</button>"
+    "<button onclick='signal(21)'>I+</button>"
+    "<button onclick='signal(22)'>I-</button>"
+    "<button onclick='signal(23)'>&check;</button>"
+    + getATEMInputs() +
+    "<button onclick='selNone()'>&empty;</button>"
+    "<button onclick='selAll()'>&forall;</button>"
+    "<label><input type='checkbox' id='multiple'/>Multiple selection</label>"
+    "<br/>"
+    + getTalliesHTML() +
+    "<input type='number' name='camId' placeholder='camId'/>"
+    "<button onclick='camId()' class='set'>Set camId</button><br/>"
+    "<input type='number' name='brightness' placeholder='brightness'/>"
+    "<button onclick='brightness()' class='set'>Set brightness</button><br>"
+    "<input type='text' name='atemip' value='" + asIp(config.atemIP).toString() + "'/>"
+    "<button onclick='atemIP()' class='set'>Set and enable ATEM</button><br>"
+    "<input type='text' name='obsip' value='" + asIp(config.obsIP).toString() + "'/>"
+    "<input type='text' name='obsport' value='" + String(config.obsPort) + "'/>"
+    "<button onclick='obsIP()' class='set'>Set and enable OBS</button><br>"
+    "<p>Enabled protocol: " + (config.protocol == 1 ? "ATEM" : "OBS") + "</p>"
     "<script>"
       "const all_i = document.querySelectorAll('i');"
-      "all_i.forEach((e) => { e.addEventListener('click', () => { e.classList.toggle('sel')}) });"
-      "function selNone() { all_i.forEach((e) => e.classList.remove('sel')) };"
-      "function selAll() { all_i.forEach((e) => e.classList.add('sel')) };"
-      "function inputs() {const ii=[]; document.querySelectorAll('i.sel').forEach((e) => ii.push(e.innerText)); return ii.join(); };"
+      "function iClick(e) {if(!document.getElementById('multiple').checked) selNone(); e.currentTarget.classList.toggle('sel')};"
+      "all_i.forEach((e) => { e.addEventListener('click', iClick) });"
+      "function selNone(){all_i.forEach((e) => e.classList.remove('sel'))};"
+      "function selAll(){all_i.forEach((e) => e.classList.add('sel'))};"
+      "function inputs(){const ii=[]; document.querySelectorAll('i.sel').forEach((e) => ii.push(e.innerText)); return ii.join();};"
       "function post(u){var x=new XMLHttpRequest();x.open('post',u);x.send()};"
-      "function brightness() { const b = document.querySelector(\"input[name='brightness']\").value; post(`/set?brightness=${b}&i=${inputs()}`) };"
-      "function color(c) { post(`/set?color=${c.toString(16)}&i=${inputs()}`) };"
-      "function signal(n) { post(`/set?signal=${n}&i=${inputs()}`) };"
-      "function atemIP() {post(`/set?atemip=${document.querySelector(\"input[name='atemip']\").value}`) };"
-      "function camId() {post(`/set?camid=${document.querySelector(\"input[name='camId']\").value}&i=${inputs()}`) };"
+      "function inputVal(n){return document.getElementsByName(n)[0].value};"
+      "function brightness(){post(`/set?brightness=${inputVal('brightness')}&i=${inputs()}`)};"
+      "function color(c){post(`/set?color=${c.toString(16)}&i=${inputs()}`)};"
+      "function signal(n){post(`/set?signal=${n}&i=${inputs()}`)};"
+      "function atemIP(){post(`/set?atemip=${inputVal('atemip')}&protocol=1`)};"
+      "function obsIP(){post(`/set?obsip=${inputVal('obsip')}&obsport=${inputVal('obsport')}&protocol=2`)};"
+      "function camId(){post(`/set?camid=${inputVal('camId')}&i=${inputs()}`)};"
     "</script>"
     "</body>"
     "</html>");
@@ -99,7 +114,7 @@ uint64_t bitsFromCSV(String s) {
   uint64_t bits = 0;
   int number = 0;
   for (size_t i = 0; i < s.length(); ++i) {
-    if (s[i] >= '0' && s[i] <= '9') {
+    if (isdigit(s[i])) {
       number = 10*number + s[i] - '0';
     } else if (number > 0) {
       bits |= 1 << (number-1);
@@ -154,17 +169,21 @@ void handleSet() {
       break;
     } else if (name == "protocol") {
       config.protocol = (uint8_t) web.arg(i).toInt();
+      if (config.protocol != 1 && config.protocol != 2) return;
       configUpdated = true;
     } else if (name == "atemip") {
       ip.fromString(web.arg(i));
       config.atemIP = (uint32_t) ip;
+      if (config.atemIP == 0) return;
       configUpdated = true;
     } else if (name == "obsip") {
       ip.fromString(web.arg(i));
       config.obsIP = (uint32_t) ip;
+      if (config.obsIP == 0) return;
       configUpdated = true;
     } else if (name == "obsport") {
       config.obsPort = web.arg(i).toInt();
+      if (config.obsPort == 0) return;
       configUpdated = true;
     }
   }
