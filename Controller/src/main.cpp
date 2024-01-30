@@ -7,7 +7,7 @@
 #include "espNow.h"
 #include "configWebserver.h"
 #include "atem.h"
-// #include "obs.h"
+#include "obs.h"
 
 struct controller_config config;
 
@@ -51,6 +51,7 @@ void setup()
   Serial.printf("protocol=%d\n", config.protocol);
   setupWebserver();
   setupEspNow();
+  
   if (esp_err_t err = mdns_init()) {
     Serial.printf("MDNS Init failed: %d\n", err);
   }
@@ -59,13 +60,13 @@ void setup()
   mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
 
   if (config.protocol == 1) setupATEM();
-  // else if (config.protocol == 2) setupOBS();
+  else if (config.protocol == 2) obs_setup();
 }
 
 void loop()
 {
   if (config.protocol == 1) atemLoop();
-  // else if (config.protocol == 2) obsLoop();
+  else if (config.protocol == 2) obs_loop();
   webserverLoop();
   delay(20);
 }
