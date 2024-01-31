@@ -37,7 +37,7 @@ void atemLoop() {
   AtemSwitcher.runLoop();
   if (AtemSwitcher.isConnected()) {
     if (millis() - lastMessageAt > TALLY_UPDATE_EACH) {
-      broadcastTally();
+      broadcastLastTally();
       lastMessageAt = millis();
     }
     lastAtemIsConnected = true;
