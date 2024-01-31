@@ -13,16 +13,15 @@
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 esp_now_peer_info_t peerInfo;
 esp_now_tally_info_t tallies[MAX_TALLY_COUNT];
+uint64_t lastProgram = 0;
+uint64_t lastPreview = 0;
 
 esp_now_tally_info_t * get_tallies() {
   return tallies;
 }
 
-void broadcastTally()
-{
-  uint64_t program = getProgramBits();
-  uint64_t preview = getPreviewBits();
-  broadcastTally(&program, &preview);
+void broadcastLastTally() {
+  broadcastTally(&lastProgram, &lastPreview);
 }
 
 void broadcastTally(uint64_t *program, uint64_t *preview) {
@@ -31,6 +30,8 @@ void broadcastTally(uint64_t *program, uint64_t *preview) {
   memcpy(payload+1, program, sizeof(uint64_t));
   memcpy(payload+1+sizeof(uint64_t), preview, sizeof(uint64_t));
   esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
+  lastProgram = *program;
+  lastPreview = *preview;
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
@@ -44,7 +45,7 @@ void broadcastBrightness(uint8_t brightness, uint64_t *bits) {
   uint8_t payload[2+sizeof(uint64_t)];
   payload[0] = SET_BRIGHTNESS;
   payload[1] = brightness;
-  memcpy(payload+2, bits, sizeof(bits));
+  memcpy(payload+2, bits, sizeof(*bits));
   if (!esp_now_send(broadcastAddress, payload, sizeof(payload))) {
     Serial.println("esp_now_send != OK");
   }
@@ -54,26 +55,28 @@ void broadcastCamId(uint8_t camId, uint64_t *bits) {
   uint8_t payload[2+sizeof(uint64_t)];
   payload[0] = SET_CAMID;
   payload[1] = camId;
-  memcpy(payload+2, bits, sizeof(bits));
+  memcpy(payload+2, bits, sizeof(*bits));
   esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
 void broadcastColor(uint32_t color, uint64_t *bits) {
+  // "/rgba\0\0\0,ir\0{tallyid}{color}"
   uint8_t payload[4+sizeof(uint64_t)];
   payload[0] = SET_COLOR;
   payload[1] = (color >> 16) & 0xFF;
   payload[2] = (color >> 8) & 0xFF;
   payload[3] = color & 0xFF;
-  memcpy(payload+4, bits, sizeof(bits));
+  memcpy(payload+4, bits, sizeof(*bits));
   esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
 void broadcastSignal(uint8_t signal, uint64_t *bits) {
+  // "/signal\0,ii\0{tallyid}{signal}"
   uint8_t payload[1+sizeof(uint64_t)];
   payload[0] = signal;  // Signal number is command number
-  memcpy(payload+1, bits, sizeof(uint64_t));
+  memcpy(payload+1, bits, sizeof(*bits));
   esp_err_t result = esp_now_send(broadcastAddress, payload, sizeof(payload));
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
@@ -89,7 +92,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
 {
   enum_command command = (enum_command) data[0];
-  Serial.printf("Command[%d]: ", len);
+  // Serial.printf("Command[%d]: ", len);
   switch (command)
   {
   case HEARTBEAT: {
@@ -113,7 +116,7 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
   
   case GET_TALLY:
     Serial.println("GET_TALLY");
-    broadcastTally();
+    broadcastLastTally();
     break;
   
   default:

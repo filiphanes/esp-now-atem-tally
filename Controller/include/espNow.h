@@ -3,6 +3,9 @@
 #include <Arduino.h>
 #include <esp_now.h>
 
+extern uint64_t lastProgram;
+extern uint64_t lastPreview;
+
 enum enum_command : uint8_t {
   SET_TALLY = 1,
   GET_TALLY = 2,
@@ -26,6 +29,6 @@ void broadcastBrightness(uint8_t brightness, uint64_t *bits);
 void broadcastCamId(uint8_t camId, uint64_t *bits);
 void broadcastColor(uint32_t, uint64_t *bits);
 void broadcastSignal(uint8_t signal, uint64_t *bits);
-void broadcastTally();
+void broadcastLastTally();
 void broadcastTally(uint64_t *program, uint64_t *preview);
 void broadcastTest(int pgm, int pvw);

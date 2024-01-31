@@ -42,6 +42,7 @@ enum enum_command : uint8_t {
   SIGNAL_ZOOMOUT = 20,
   SIGNAL_ISOUP = 21,
   SIGNAL_ISODOWN = 22,
+  SIGNAL_OK = 23,
 };
 
 void colorBlink(uint8_t r, uint8_t g, uint8_t b, int wait) {
@@ -306,10 +307,12 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   case SIGNAL_UP:
   case SIGNAL_RIGHT:
   case SIGNAL_ISOUP:
+  case SIGNAL_OK:
   case SIGNAL_ISODOWN: {
     uint64_t *bits_p = (uint64_t *)(data+1);
     Serial.printf("SIGNAL %u %lu\n", command, *bits_p);
     if (getBit(*bits_p, camId-1)) displaySignal(command);
+    lastMessageReceived = millis();
     break;
   }
 
