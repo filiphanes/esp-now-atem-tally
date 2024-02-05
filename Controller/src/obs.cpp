@@ -20,6 +20,10 @@ static void log_error_if_nonzero(const char *message, int error_code) {
   }
 }
 
+inline uint64_t bitn(uint8_t n) {
+  return (uint64_t)1 << (n-1);
+}
+
 uint64_t bitsFromTags(const char* s) {
   uint64_t bits = 0;
   int len = strlen(s);
@@ -37,7 +41,7 @@ uint64_t bitsFromTags(const char* s) {
           break;
         }
       }
-      if (n > 0) bits |= 1 << (n-1);
+      if (n > 0) bits |= bitn(n);
     } 
     boundary = !isalnum(s[i]);
   }
@@ -71,7 +75,7 @@ void obs_message_handler(StaticJsonDocument<512> doc) {
     else if (doc["d"]["eventType"] == "CustomEvent"
             && doc["d"]["eventData"]["type"] == "tally") {
       uint64_t bits = 0;
-      bits |= 1 << (doc["d"]["eventData"]["to"].as<int>()-1);
+      bits |= bitn(doc["d"]["eventData"]["to"].as<int>());
       broadcastSignal(doc["d"]["eventData"]["signal"].as<uint8_t>(), &bits);
     }
     else if (doc["d"]["eventType"] == "VendorEvent" && doc["d"]["eventData"]["vendorName"] == "downstream-keyer") {

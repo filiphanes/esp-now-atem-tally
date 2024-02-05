@@ -19,7 +19,7 @@
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 unsigned long lastMessageReceived = -TALLY_UPDATE_EACH;
-uint8_t camId = 0;
+uint8_t camId = 2;
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 enum enum_command : uint8_t {
@@ -254,7 +254,7 @@ void fillColor(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 inline bool getBit(uint64_t bits, int i) {
-  return bits & (1 << i);
+  return bits & ((uint64_t)1 << i);
 }
 
 // Callback function that will be executed when data is received
@@ -307,8 +307,8 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   case SIGNAL_UP:
   case SIGNAL_RIGHT:
   case SIGNAL_ISOUP:
-  case SIGNAL_OK:
-  case SIGNAL_ISODOWN: {
+  case SIGNAL_ISODOWN:
+  case SIGNAL_OK: {
     uint64_t *bits_p = (uint64_t *)(data+1);
     Serial.printf("SIGNAL %u %lu\n", command, *bits_p);
     if (getBit(*bits_p, camId-1)) displaySignal(command);
