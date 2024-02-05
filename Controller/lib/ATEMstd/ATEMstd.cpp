@@ -470,8 +470,8 @@ void ATEMstd::_parseGetCommands(const char *cmdStr)
 			temp = atemTallyByIndexTallyFlags[a];
 #endif
 			atemTallyByIndexTallyFlags[a] = _packet[2 + a];
-			if (atemTallyByIndexTallyFlags[a] & 1) atemTallyProgram |= 1 << a;
-			if (atemTallyByIndexTallyFlags[a] & 2) atemTallyPreview |= 1 << a;
+			if (atemTallyByIndexTallyFlags[a] & 1) atemTallyProgram |= (uint64_t)1 << a;
+			if (atemTallyByIndexTallyFlags[a] & 2) atemTallyPreview |= (uint64_t)1 << a;
 #if ATEM_debug
 			if ((_serialOutput == 0x80 && atemTallyByIndexTallyFlags[a] != temp) || (_serialOutput == 0x81 && !hasInitialized()))
 			{

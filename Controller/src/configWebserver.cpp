@@ -123,6 +123,10 @@ void handleRoot() {
   web.send(200, "text/html", s);
 }
 
+inline uint64_t bitn(uint8_t n) {
+  return (uint64_t)1 << (n-1);
+}
+
 uint64_t bitsFromCSV(String s) {
   uint64_t bits = 0;
   int number = 0;
@@ -130,11 +134,11 @@ uint64_t bitsFromCSV(String s) {
     if (isdigit(s[i])) {
       number = 10*number + s[i] - '0';
     } else if (number > 0) {
-      bits |= 1 << (number-1);
+      bits |= bitn(number);
       number = 0;
     }
   }
-  if (number > 0) bits |= 1 << (number-1);
+  if (number > 0) bits |= bitn(number);
   return bits;
 }
 

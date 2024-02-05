@@ -11,7 +11,7 @@ uint64_t getProgramBits()
   uint64_t bits = 0;
   for (int i = 1; i <= TALLY_COUNT; i++)
     if (AtemSwitcher.getProgramTally(i))
-      bits |= 1 << (i - 1);
+      bits |= (uint64_t)1 << (i - 1);
   return bits;
 }
 
@@ -20,7 +20,7 @@ uint64_t getPreviewBits()
   uint64_t bits = 0;
   for (int i = 1; i <= TALLY_COUNT; i++)
     if (AtemSwitcher.getPreviewTally(i))
-      bits |= 1 << (i - 1);
+      bits |= (uint64_t)1 << (i - 1);
   return bits;
 }
 
