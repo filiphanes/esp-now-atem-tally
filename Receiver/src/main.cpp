@@ -22,7 +22,7 @@ unsigned long lastMessageReceived = -TALLY_UPDATE_EACH;
 uint8_t camId = 2;
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-enum enum_command : uint8_t {
+enum espnow_command : uint8_t {
   SET_TALLY = 1,
   GET_TALLY = 2,
   SWITCH_CAMID = 3,
@@ -70,7 +70,7 @@ void colorWipe(uint8_t r, uint8_t g, uint8_t b, int wait) {
 void readCamId() {
   EEPROM.begin(512);
   EEPROM.get(CAMERA_ID_ADDRESS, camId);
-  if (camId > TALLY_COUNT) camId = 2;
+  if (camId > TALLY_COUNT) camId = 1;
   EEPROM.commit();
   Serial.print("camId: ");
   Serial.println(camId);
@@ -259,16 +259,18 @@ inline bool getBit(uint64_t bits, int i) {
 
 // Callback function that will be executed when data is received
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
-  enum_command command = (enum_command)data[0];
+  espnow_command command = (espnow_command)data[0];
   Serial.printf("<[%d] ");
   switch (command) {
 
   case SET_TALLY: {
     uint64_t *program_p = (uint64_t *)(data+1);
     uint64_t *preview_p = (uint64_t *)(data+1+sizeof(uint64_t));
-    if      (getBit(*program_p, camId-1)) fillColor(255, 0, 0);
-    else if (getBit(*preview_p, camId-1)) fillColor(0, 255, 0);
-    else fillColor(0, 0, 0);
+    fillColor(
+      255*getBit(*program_p, camId-1),
+      255*getBit(*preview_p, camId-1),
+      0
+    );
     lastMessageReceived = millis();
 #ifdef DEBUG
     Serial.println("SET_TALLY");
@@ -338,7 +340,7 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
     /*
     uint8_t mac[6];
     esp_wifi_get_mac(WIFI_IF_STA, mac);
-    if (memcmp(mac, (uint8_t*) (data + sizeof(enum_command)), 6) == 0) {
+    if (memcmp(mac, (uint8_t*) (data + sizeof(espnow_command)), 6) == 0) {
       camId = data[7];
       Serial.printf("SET_CAMID %d\n", camId);
     }
@@ -348,8 +350,8 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   }
 
   case SWITCH_CAMID: {
-    uint8_t* id1 = (uint8_t*) (data + sizeof(enum_command));
-    uint8_t* id2 = (uint8_t*) (data + sizeof(enum_command) + sizeof(uint8_t));
+    uint8_t* id1 = (uint8_t*) (data + sizeof(espnow_command));
+    uint8_t* id2 = (uint8_t*) (data + sizeof(espnow_command) + sizeof(uint8_t));
     Serial.printf("SWITCH_CAMID %d<>%d", id1, id2);
     if (camId == *id1) {
       camId = *id2;
@@ -378,7 +380,7 @@ void sendHeartbeat() {
 }
 
 void setup() {
-  Serial.begin(115200);
+  // Serial.begin(115200);
   strip.begin();
   strip.setBrightness(BRIGHTNESS);
   readCamId();
@@ -412,10 +414,11 @@ void setup() {
 
 void loop() {
   sendHeartbeat();
-  delay(10000);
+  delay(2000);
   if (millis() - lastMessageReceived > 5000) {
     fillColor(0, 0, 0);
     strip.setPixelColor(millis()%LED_COUNT, 128, 0, 0);
     strip.show();
   }
+  Serial.read();
 }

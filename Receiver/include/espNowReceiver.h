@@ -1,4 +1,4 @@
 #pragma once
 
-void setupEspNow();
+void espnow_setup();
 void espNowLoop();

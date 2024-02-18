@@ -1,10 +1,9 @@
 #include "atem.h"
-#include "espNow.h"
+#include "espnow.h"
 #include "main.h"
 
 ATEMstd AtemSwitcher;
 boolean lastAtemIsConnected = false;
-long lastMessageAt = 0;
 
 uint64_t getProgramBits()
 {
@@ -24,22 +23,19 @@ uint64_t getPreviewBits()
   return bits;
 }
 
-void setupATEM() {
-  Serial.print("setupATEM IP:");
+void atem_setup() {
+  Serial.print("atem_setup IP:");
   Serial.println(IPAddress(config.atemIP).toString());
   AtemSwitcher.begin(config.atemIP);
   AtemSwitcher.serialOutput(1);
   AtemSwitcher.connect();
-  AtemSwitcher.setAtemTallyCallback(broadcastTally);
+  AtemSwitcher.setAtemTallyCallback(espnow_tally);
 }
 
-void atemLoop() {
+void atem_loop() {
   AtemSwitcher.runLoop();
   if (AtemSwitcher.isConnected()) {
-    if (millis() - lastMessageAt > TALLY_UPDATE_EACH) {
-      broadcastLastTally();
-      lastMessageAt = millis();
-    }
+    espnow_loop();
     lastAtemIsConnected = true;
   } else if (lastAtemIsConnected) {
     lastAtemIsConnected = false;
