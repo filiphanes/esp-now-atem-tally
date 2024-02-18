@@ -13,5 +13,5 @@ extern ATEMstd AtemSwitcher;
 
 uint64_t getProgramBits();
 uint64_t getPreviewBits();
-void setupATEM();
-void atemLoop();
+void atem_setup();
+void atem_loop();

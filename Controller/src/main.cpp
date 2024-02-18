@@ -4,10 +4,11 @@
 #include <EEPROM.h>
 #include <mdns.h>
 
-#include "espNow.h"
+#include "espnow.h"
 #include "configWebserver.h"
 #include "atem.h"
 #include "obs.h"
+#include "vmix.h"
 
 struct controller_config config;
 
@@ -18,7 +19,7 @@ void readConfig()
   EEPROM.get(0, config);
   if (config.atemIP == 0xFFFFFFFF) {
     // Set defaults
-    config.protocol = 1;
+    config.protocol = PROTOCOL_ATEM;
     // config.atemIP = IPAddress(192,168,2,240);
     config.atemIP = (uint32_t)IPAddress(192,168,88,240);
     config.atemPort = 9910;
@@ -50,7 +51,7 @@ void setup()
   readConfig();
   Serial.printf("protocol=%d\n", config.protocol);
   setupWebserver();
-  setupEspNow();
+  espnow_setup();
   
   if (esp_err_t err = mdns_init()) {
     Serial.printf("MDNS Init failed: %d\n", err);
@@ -59,14 +60,16 @@ void setup()
   mdns_instance_name_set("TallyBridge");
   mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
 
-  if (config.protocol == 1) setupATEM();
-  else if (config.protocol == 2) obs_setup();
+  if (config.protocol == PROTOCOL_ATEM) atem_setup();
+  else if (config.protocol == PROTOCOL_OBS) obs_setup();
+  else if (config.protocol == PROTOCOL_VMIX) vmix_setup();
 }
 
 void loop()
 {
-  if (config.protocol == 1) atemLoop();
-  else if (config.protocol == 2) obs_loop();
+  if (config.protocol == PROTOCOL_ATEM) atem_loop();
+  else if (config.protocol == PROTOCOL_OBS) obs_loop();
+  else if (config.protocol == PROTOCOL_VMIX) obs_loop();
   webserverLoop();
   delay(20);
 }

@@ -1,11 +1,15 @@
 #include "configWebserver.h"
-#include <WebServer_WT32_ETH01.h>
+// #include <WebServer_WT32_ETH01.h>
+#include <ETH.h>
+#include <WebServer.h>
 #include "atem.h"
-#include "espNow.h"
+#include "obs.h"
+#include "espnow.h"
 #include "main.h"
 
 #define MULTILINE(...) #__VA_ARGS__
 
+static bool eth_connected = false;
 WebServer web(80);
 
 IPAddress asIp(uint32_t i) {
@@ -50,7 +54,7 @@ void handleRoot() {
 "<button onclick='signal(17)'>F</button>"
 "<button onclick='signal(18)'>B</button>"
 "<button onclick='signal(19)'>Z</button>"
-"<button onclick='signal(20)'>&#9761;</button>"
+"<button onclick='signal(20)' style='transform:scaleX(-1);'>Z</button>"
 "<button onclick='signal(21)'>I+</button>"
 "<button onclick='signal(22)'>I-</button>"
 "<button onclick='signal(23)'>&check;</button>"
@@ -73,14 +77,14 @@ void handleRoot() {
 <button onclick='brightness()' class='set'>Set brightness</button>
 <br>
 <label><input type='radio' name='protocol' value='1' )";
-  if (config.protocol == 1) s += "checked='checked'";
+  if (config.protocol == PROTOCOL_ATEM) s += "checked='checked'";
   s += "/> ATEM</label>"
 "<input type='text' name='atemip' placeholder='ATEM IP' value='";
   s += asIp(config.atemIP).toString();
   s += "'/>"
 "<br/>"
 "<label><input type='radio' name='protocol' value='2' ";
-  if (config.protocol == 2) s += "checked='checked'";
+  if (config.protocol == PROTOCOL_OBS) s += "checked='checked'";
  s += "/> OBS</label>"
 "<input type='text' name='obsip' placeholder='OBS IP' value='";
   s += asIp(config.obsIP).toString();
@@ -164,27 +168,29 @@ void handleSet() {
     if (name == "color") {
       uint32_t color = parseHexColor(web.arg(i));
       uint64_t bits = bitsFromCSV(web.arg("i"));
-      broadcastColor(color, &bits);
+      espnow_color(color, &bits);
       break;
     } else if (name == "program") {
       uint64_t programBits = bitsFromCSV(web.arg(i));
       uint64_t previewBits = bitsFromCSV(web.arg("preview"));
-      broadcastTally(&programBits, &previewBits);
+      espnow_tally(&programBits, &previewBits);
       break;
     } else if (name == "brightness") {
       uint64_t bits = bitsFromCSV(web.arg("i"));
-      broadcastBrightness(web.arg(i).toInt(), &bits);
+      espnow_brightness(web.arg(i).toInt(), &bits);
       break;
     } else if (name == "camid") {
       uint64_t bits = bitsFromCSV(web.arg("i"));
-      broadcastCamId(web.arg(i).toInt(), &bits);
+      espnow_camid(web.arg(i).toInt(), &bits);
       break;
     } else if (name == "signal") {
       uint64_t bits = bitsFromCSV(web.arg("i"));
-      broadcastSignal(web.arg(i).toInt(), &bits);
+      long signal = web.arg(i).toInt();
+      espnow_signal(signal, &bits);
+      if (config.protocol == PROTOCOL_OBS) obs_broadcast_signal(bits, signal);
       break;
     } else if (name == "protocol") {
-      config.protocol = (uint8_t) web.arg(i).toInt();
+      config.protocol = (switcher_protocol) web.arg(i).toInt();
       if (config.protocol != 1 && config.protocol != 2) return;
       configUpdated = true;
     } else if (name == "atemip") {
@@ -214,12 +220,12 @@ void handleSet() {
 }
 
 void handleTally() {
-  web.send(200, "application/json", "{\"program\":"+String(lastProgram)+",\"preview\":"+String(lastPreview)+"}");
+  web.send(200, "application/json", "{\"program\":"+String(programBits)+",\"preview\":"+String(previewBits)+"}");
 }
 
 void handleSeen() {
   String s = "{\"tallies\":[";
-  esp_now_tally_info_t *tallies = get_tallies();
+  espnow_tally_info_t *tallies = espnow_tallies();
   unsigned long now = millis();
   for (int i=1; i<64; i++) {
     if (tallies[i].id == 0) break;
@@ -234,9 +240,47 @@ void handleSeen() {
   web.send(200, "application/json", s);
 }
 
+void WiFiEvent(WiFiEvent_t event)
+{
+  switch (event) {
+    case ARDUINO_EVENT_ETH_START:
+      Serial.println("ETH Started");
+      //set eth hostname here
+      ETH.setHostname("esp32-ethernet");
+      break;
+    case ARDUINO_EVENT_ETH_CONNECTED:
+      Serial.println("ETH Connected");
+      break;
+    case ARDUINO_EVENT_ETH_GOT_IP:
+      Serial.print("ETH MAC: ");
+      Serial.print(ETH.macAddress());
+      Serial.print(", IPv4: ");
+      Serial.print(ETH.localIP());
+      if (ETH.fullDuplex()) {
+        Serial.print(", FULL_DUPLEX");
+      }
+      Serial.print(", ");
+      Serial.print(ETH.linkSpeed());
+      Serial.println("Mbps");
+      eth_connected = true;
+      break;
+    case ARDUINO_EVENT_ETH_DISCONNECTED:
+      Serial.println("ETH Disconnected");
+      eth_connected = false;
+      break;
+    case ARDUINO_EVENT_ETH_STOP:
+      Serial.println("ETH Stopped");
+      eth_connected = false;
+      break;
+    default:
+      break;
+  }
+}
+
 void setupWebserver() {
   Serial.print("Starting HTTP server on ");
   Serial.print(ARDUINO_BOARD);
+  #ifdef WEBSERVER_WT32_ETH01_VERSION
   Serial.print(" with ");
   Serial.println(SHIELD_TYPE);
   Serial.println(WEBSERVER_WT32_ETH01_VERSION);
@@ -245,6 +289,10 @@ void setupWebserver() {
   // Initialize the Ethernet connection
   ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER);
   WT32_ETH01_waitForConnect();
+  #else
+  WiFi.onEvent(WiFiEvent);
+  ETH.begin();
+  #endif
   web.on("/tally", handleTally);
   web.on("/set", handleSet);
   web.on("/seen", handleSeen);

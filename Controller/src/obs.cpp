@@ -1,24 +1,12 @@
-#include <esp_log.h>
-#include <esp32-hal-log.h>
-
 #include "ArduinoJson.h"
-#include "espNow.h"
+#include "espnow.h"
 #include "obs.h"
 
-#define TALLY_UPDATE_EACH 3000
+#define MULTILINE(...) #__VA_ARGS__
 
 static const char *TAG = "websocket";
 esp_websocket_client_handle_t client;
-long lastMessageTime = 0;
-uint64_t programBits = 0;
-uint64_t previewBits = 0;
 uint64_t DSKbits = 0;
-
-static void log_error_if_nonzero(const char *message, int error_code) {
-  if (error_code != 0) {
-    ESP_LOGE(TAG, "Last error %s: 0x%x", message, error_code);
-  }
-}
 
 inline uint64_t bitn(uint8_t n) {
   return (uint64_t)1 << (n-1);
@@ -48,6 +36,16 @@ uint64_t bitsFromTags(const char* s) {
   return bits;
 }
 
+void obs_broadcast_signal(uint64_t bits, uint8_t signal) {
+  char op[150] = "";
+  for (int i=0; i < 64; i++) {
+    if (bits & bitn(i)) {
+      sprintf(op, MULTILINE({"op":6,"d":{"requestType":"BroadcastCustomEvent","requestId":"b","requestData":{"eventData":{"type":"tally","from":0,"to":%d,"signal":%u}}}}), i, signal);  
+      esp_websocket_client_send_text(client, op, strlen(op), portMAX_DELAY);
+    }
+  }
+}
+
 void obs_request_current_scenes() {
   const char* op1 = "{\"op\":6,\"d\":{\"requestType\":\"GetCurrentProgramScene\",\"requestId\":\"a\",\"requestData\":{}}}";
   esp_websocket_client_send_text(client, op1, strlen(op1), portMAX_DELAY);
@@ -62,26 +60,25 @@ void obs_message_handler(StaticJsonDocument<512> doc) {
       // https://github.com/obsproject/obs-websocket/blob/5.3.3/docs/generated/protocol.md#getsceneitemlist
       programBits = bitsFromTags(doc["d"]["eventData"]["sceneName"]);
       uint64_t program = programBits | DSKbits;
-      broadcastTally(&programBits, &previewBits);
+      espnow_tally(&programBits, &previewBits);
     }
     else if (doc["d"]["eventType"]  == "CurrentPreviewSceneChanged") {
       previewBits = bitsFromTags(doc["d"]["eventData"]["sceneName"]);
-      broadcastTally(&programBits, &previewBits);
+      espnow_tally(&programBits, &previewBits);
     }
     else if (doc["d"]["eventType"] == "SceneTransitionStarted") {
       programBits |= previewBits;
-      broadcastTally(&programBits, &previewBits);
+      espnow_tally(&programBits, &previewBits);
     }
     else if (doc["d"]["eventType"] == "CustomEvent"
             && doc["d"]["eventData"]["type"] == "tally") {
-      uint64_t bits = 0;
-      bits |= bitn(doc["d"]["eventData"]["to"].as<int>());
-      broadcastSignal(doc["d"]["eventData"]["signal"].as<uint8_t>(), &bits);
+      uint64_t bits = bitn(doc["d"]["eventData"]["to"].as<int>());
+      espnow_signal(doc["d"]["eventData"]["signal"].as<uint8_t>(), &bits);
     }
     else if (doc["d"]["eventType"] == "VendorEvent" && doc["d"]["eventData"]["vendorName"] == "downstream-keyer") {
       DSKbits = bitsFromTags(doc["d"]["eventData"]["eventData"]["new_scene"]);
       uint64_t program = programBits | DSKbits;
-      broadcastTally(&program, &previewBits);
+      espnow_tally(&program, &previewBits);
 		}
     break;
   }
@@ -90,10 +87,10 @@ void obs_message_handler(StaticJsonDocument<512> doc) {
       // https://github.com/obsproject/obs-websocket/blob/5.3.3/docs/generated/protocol.md#getsceneitemlist
       programBits = bitsFromTags(doc["d"]["responseData"]["currentProgramSceneName"]);
       programBits |= DSKbits;
-      broadcastTally(&programBits, &previewBits);
+      espnow_tally(&programBits, &previewBits);
     } else if (doc["d"]["requestType"] == "GetCurrentPreviewScene") {
       previewBits = bitsFromTags(doc["d"]["responseData"]["currentPreviewSceneName"]);
-      broadcastTally(&programBits, &previewBits);
+      espnow_tally(&programBits, &previewBits);
     }
     break;
   case 2:
@@ -161,12 +158,9 @@ void obs_setup() {
 }
 
 void obs_loop() {
-  if (millis() - lastMessageTime > TALLY_UPDATE_EACH) {
-    broadcastTally(&programBits, &previewBits);
-    lastMessageTime = millis();
-    if (!esp_websocket_client_is_connected(client)) {
-      esp_websocket_client_destroy(client);
-      obs_setup();
-    }
+  espnow_loop();
+  if (!esp_websocket_client_is_connected(client)) {
+    esp_websocket_client_destroy(client);
+    obs_setup();
   }
 }
