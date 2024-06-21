@@ -304,8 +304,8 @@ void displayNumber(uint8_t r, uint8_t g, uint8_t b, int number) {
   int digit = number % 10;
   uint8_t x = 0;
   int i = 0;
-  for (i = 0; i < 25; i++) {
-    x = digits5x5[digit*25 + i];
+  for (i = 0; i < LED_COUNT; i++) {
+    x = digits5x5[digit*LED_COUNT + i];
     strip.setPixelColor(i, x*r, x*g, x*b);
   }
   // Signify tens by number of first white pixels
