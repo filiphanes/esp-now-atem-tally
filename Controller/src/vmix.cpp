@@ -32,6 +32,10 @@ void vmix_loop() {
       if      (b[i] == '0') continue;
       else if (b[i] == '1') programBits |= bitn(i+1);
       else if (b[i] == '2') previewBits |= bitn(i+1);
+      else if (b[i] == '3') {
+        programBits |= bitn(i+1);
+        previewBits |= bitn(i+1);
+      }
       else break;
       i++;
     }
