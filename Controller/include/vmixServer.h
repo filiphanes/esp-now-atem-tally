@@ -9,3 +9,4 @@
 
 void vmixServerSetup();
 void vmixServerLoop();
+void vmix_tally(uint64_t *program, uint64_t *preview);
