@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <WiFiServer.h>
 #include <vector>
-#include "vmixServer.h"
 #include "espnow.h"
 
 WiFiServer vmixServer(8099);
@@ -12,33 +11,26 @@ struct VmixClient {
 };
 
 std::vector<VmixClient*> subscribers;
+String lastTallyResponse = "TALLY OK 0\r\n";
 
-uint64_t lastProgramBits = 0;
-uint64_t lastPreviewBits = 0;
-
-String getTallyString() {
+String vmix_tally_string(uint64_t *program, uint64_t *preview) {
     char buf[65];
     for (int i = 0; i < 64; i++) {
-        bool pgm = (programBits & (1ULL << i)) != 0;
-        bool pvw = (previewBits & (1ULL << i)) != 0;
-        buf[i] = pgm ? (pvw ? '3' : '2') : (pvw ? '1' : '0');
+        bool pgm = (*program & (1ULL << i)) != 0;
+        bool pvw = (*preview & (1ULL << i)) != 0;
+        buf[i] = pgm ? '1' : (pvw ? '2' : '0');
     }
     buf[64] = '\0';
     return String(buf);
 }
 
-void sendTallyUpdate() {
-    if (programBits == lastProgramBits && previewBits == lastPreviewBits) {
-        return;
-    }
-    lastProgramBits = programBits;
-    lastPreviewBits = previewBits;
-    String ts = getTallyString();
-    String msg = "TALLY OK " + ts + "\r\n";
+void vmix_tally(uint64_t *program, uint64_t *preview) {
+    String ts = vmix_tally_string(program, preview);
+    lastTallyResponse = "TALLY OK " + ts + "\r\n";
     for (auto clp : subscribers) {
         VmixClient* cl = clp;
         if (cl->subscribed && cl->socket.connected()) {
-            cl->socket.print(msg);
+            cl->socket.print(lastTallyResponse);
         }
     }
 }
@@ -46,22 +38,17 @@ void sendTallyUpdate() {
 void processVmixCommand(String cmd, VmixClient* cl) {
     cmd.trim();
     if (cmd == "TALLY") {
-        String ts = getTallyString();
-        cl->socket.print("TALLY OK ");
-        cl->socket.print(ts);
+        cl->socket.print(lastTallyResponse);
     } else if (cmd == "SUBSCRIBE TALLY") {
         cl->subscribed = true;
-        cl->socket.print("SUBSCRIBE OK TALLY");
-        String ts = getTallyString();
-        cl->socket.print("TALLY OK ");
-        cl->socket.print(ts);
+        cl->socket.print("SUBSCRIBE OK TALLY\r\n");
+        cl->socket.print(lastTallyResponse);
     } else if (cmd == "UNSUBSCRIBE TALLY") {
         cl->subscribed = false;
-        cl->socket.print("UNSUBSCRIBE OK TALLY");
+        cl->socket.print("UNSUBSCRIBE OK TALLY\r\n");
     } else {
-        cl->socket.print("ER");
+        cl->socket.print("ER\r\n");
     }
-    cl->socket.print("\r\n");
 }
 
 void vmixServerSetup() {
