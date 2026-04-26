@@ -72,3 +72,38 @@ Configure via web UI:
 - IP: Switcher IP address
 - Port: Connection port (for OBS/vMix)
 - Group: ESP-NOW group (1-9, broadcasts to all if empty)
+- Bg: Background color in hex (e.g., 001E1E for dark grey)
+
+# OSC Protocol
+UDP server on port 8000. Supports:
+
+## /tally[program,preview]
+Set both program and preview tallies. First arg = program, second arg = preview. Values are tally numbers.
+- `/tally ii(2)(4)` - Tally 2 program, tally 4 preview
+- `/tally ii(3)(0)` - Tally 3 program only
+- `/tally ii(0)(5)` - Tally 5 preview only
+
+## /tally,N
+Same as `/tally ii(N)(0)` - Set tally N to program
+
+## /program,N
+Set tally N to program only. Can accept multiple integers.
+- `/program 2` - Tally 2 program
+- `/program ii(2)(4)(6)` - Tallies 2, 4, 6 program
+
+## /preview,N
+Set tally N to preview only. Can accept multiple integers.
+- `/preview 4` - Tally 4 preview
+- `/preview ii(1)(3)(5)` - Tallies 1, 3, 5 preview
+
+## /color,N
+Set tally N color to red
+- `/color,4` - Set tally 4 to red
+
+## /brightness,N
+Set tally N brightness to full
+- `/brightness,7` - Set tally 7 to full brightness
+
+## /id,N
+Set tally N camera ID
+- `/id,8` - Set tally 8 camera ID

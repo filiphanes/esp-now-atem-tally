@@ -17,6 +17,7 @@ struct controller_config {
     uint16_t obsPort = 4455;
     uint32_t vmixIP = (192<<24)+(168<<16)+(2<<8)+18;
     uint16_t vmixPort = 8099;
+    uint32_t bgColor = 0x001E1E;
 };
 
 extern struct controller_config config;

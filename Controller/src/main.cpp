@@ -10,6 +10,7 @@
 #include "obs.h"
 #include "vmix.h"
 #include "vmixServer.h"
+#include "osc.h"
 
 struct controller_config config;
 
@@ -49,6 +50,7 @@ void setup()
   Serial.printf("protocol=%d\n", config.protocol);
   setupWebserver();
   vmixServerSetup();
+  osc_setup();
   espnow_setup();
   
   if (esp_err_t err = mdns_init()) {
@@ -68,6 +70,7 @@ void loop()
   if (config.protocol == PROTOCOL_ATEM) atem_loop();
   else if (config.protocol == PROTOCOL_OBS) obs_loop();
   else if (config.protocol == PROTOCOL_VMIX) vmix_loop();
+  osc_loop();
   vmixServerLoop();
   webserverLoop();
   delay(20);
