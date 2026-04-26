@@ -108,6 +108,10 @@ void handleRoot() {
   s += config.group;
   s += R"('/>
 <br/>
+Bg: <input type='text' name='bgcolor' size='6' maxlength='6' value='";
+  s += String(config.bgColor, HEX);
+  s += R"('/>
+<br/>
 <button onclick='save()' class='set'>Save</button>
 <script>
   const all_i = document.querySelectorAll('i');
@@ -123,7 +127,7 @@ void handleRoot() {
   function brightness(){post(`/set?brightness=${inputVal('brightness')}&i=${inputs()}`)};
   function color(c){post(`/set?color=${c.toString(16)}&i=${inputs()}`)};
   function signal(n){post(`/set?signal=${n}&i=${inputs()}`)};
-  function save(){post(`/set?protocol=${protocolVal()}&atemip=${inputVal('atemip')}&obsip=${inputVal('obsip')}&obsport=${inputVal('obsport')}&vmixip=${inputVal('vmixip')}&vmixport=${inputVal('vmixport')}&group=${inputVal('group')}}`)};
+  function save(){post(`/set?protocol=${protocolVal()}&atemip=${inputVal('atemip')}&obsip=${inputVal('obsip')}&obsport=${inputVal('obsport')}&vmixip=${inputVal('vmixip')}&vmixport=${inputVal('vmixport')}&group=${inputVal('group')}&bgcolor=${inputVal('bgcolor')}}`)};
   function tally(){var x=post('/tally');x.onreadystatechange=function(){ if(x.readyState===4){fillTallies(JSON.parse(x.responseText));setTimeout(tally,1000)}} };
   function fillTallies(d){all_i.forEach(function(e,i) {
    if(d.program & (1<<i)){e.classList.add('pgm')}else{e.classList.remove('pgm')};
@@ -228,6 +232,9 @@ void handleSet() {
       configUpdated = true;
     } else if (name == "group") {
       config.group = web.arg(i)[0];
+    } else if (name == "bgcolor") {
+      config.bgColor = parseHexColor(web.arg(i));
+      configUpdated = true;
     }
   }
   web.send(200, "text/plain", "OK");
