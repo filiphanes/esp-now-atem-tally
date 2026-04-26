@@ -59,7 +59,7 @@ void obs_message_handler(StaticJsonDocument<512> doc) {
     if (doc["d"]["eventType"] == "CurrentProgramSceneChanged") {
       // https://github.com/obsproject/obs-websocket/blob/5.3.3/docs/generated/protocol.md#getsceneitemlist
       programBits = bitsFromTags(doc["d"]["eventData"]["sceneName"]);
-      uint64_t program = programBits | DSKbits;
+      programBits = programBits | DSKbits;
       espnow_tally(&programBits, &previewBits);
     }
     else if (doc["d"]["eventType"]  == "CurrentPreviewSceneChanged") {
@@ -77,8 +77,8 @@ void obs_message_handler(StaticJsonDocument<512> doc) {
     }
     else if (doc["d"]["eventType"] == "VendorEvent" && doc["d"]["eventData"]["vendorName"] == "downstream-keyer") {
       DSKbits = bitsFromTags(doc["d"]["eventData"]["eventData"]["new_scene"]);
-      uint64_t program = programBits | DSKbits;
-      espnow_tally(&program, &previewBits);
+      programBits = programBits | DSKbits;
+      espnow_tally(&programBits, &previewBits);
 		}
     break;
   }
@@ -150,7 +150,6 @@ void obs_setup() {
   Serial.printf("obs_setup %s\n", uri);
   const esp_websocket_client_config_t ws_cfg = {
     .uri = uri,
-    .port = config.obsPort,
   };
   client = esp_websocket_client_init(&ws_cfg);
   esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);

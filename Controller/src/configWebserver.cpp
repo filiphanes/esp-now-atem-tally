@@ -94,6 +94,16 @@ void handleRoot() {
   s += config.obsPort;
   s += "'/>"
 "<br/>"
+"<label><input type='radio' name='protocol' value='3' ";
+  if (config.protocol == PROTOCOL_VMIX) s += "checked='checked'";
+  s += "/> vMix</label>"
+"<input type='text' name='vmixip' placeholder='vMix IP' value='";
+  s += asIp(config.vmixIP).toString();
+  s += "'/>"
+"port: <input type='text' name='vmixport' placeholder='port' value='";
+  s += config.vmixPort;
+  s += "'/>"
+"<br/>"
 "Group: <input type='text' name='group' size='1' maxlength='1' value='";
   s += config.group;
   s += R"('/>
@@ -113,7 +123,7 @@ void handleRoot() {
   function brightness(){post(`/set?brightness=${inputVal('brightness')}&i=${inputs()}`)};
   function color(c){post(`/set?color=${c.toString(16)}&i=${inputs()}`)};
   function signal(n){post(`/set?signal=${n}&i=${inputs()}`)};
-  function save(){post(`/set?protocol=${protocolVal()}&atemip=${inputVal('atemip')}&obsip=${inputVal('obsip')}&obsport=${inputVal('obsport')}&group=${inputVal('group')}}`)};
+  function save(){post(`/set?protocol=${protocolVal()}&atemip=${inputVal('atemip')}&obsip=${inputVal('obsip')}&obsport=${inputVal('obsport')}&vmixip=${inputVal('vmixip')}&vmixport=${inputVal('vmixport')}&group=${inputVal('group')}}`)};
   function tally(){var x=post('/tally');x.onreadystatechange=function(){ if(x.readyState===4){fillTallies(JSON.parse(x.responseText));setTimeout(tally,1000)}} };
   function fillTallies(d){all_i.forEach(function(e,i) {
    if(d.program & (1<<i)){e.classList.add('pgm')}else{e.classList.remove('pgm')};
@@ -191,7 +201,7 @@ void handleSet() {
       break;
     } else if (name == "protocol") {
       config.protocol = (switcher_protocol) web.arg(i).toInt();
-      if (config.protocol != 1 && config.protocol != 2) return;
+      if (config.protocol != 1 && config.protocol != 2 && config.protocol != 3) return;
       configUpdated = true;
     } else if (name == "atemip") {
       ip.fromString(web.arg(i));
@@ -206,6 +216,15 @@ void handleSet() {
     } else if (name == "obsport") {
       config.obsPort = web.arg(i).toInt();
       if (config.obsPort == 0) return;
+      configUpdated = true;
+    } else if (name == "vmixip") {
+      ip.fromString(web.arg(i));
+      config.vmixIP = (uint32_t) ip;
+      if (config.vmixIP == 0) return;
+      configUpdated = true;
+    } else if (name == "vmixport") {
+      config.vmixPort = web.arg(i).toInt();
+      if (config.vmixPort == 0) return;
       configUpdated = true;
     } else if (name == "group") {
       config.group = web.arg(i)[0];

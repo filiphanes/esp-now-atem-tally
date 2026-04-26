@@ -21,6 +21,10 @@ static const char *TAG = "tally";
 #define DEFAULT_CAMID 3
 #define DEFAULT_CAMGROUP 0
 
+// Keep minumum current so powerbank will not shutoff
+#define BACKGROUND_COLOR 0,0,0
+
+
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #ifdef CONFIG_IDF_TARGET_ESP32S3
  #define RMT_LED_STRIP_GPIO_NUM  14
@@ -32,7 +36,7 @@ static const char *TAG = "tally";
  #define DEFAULT_BRIGHTNESS 10  // 0-255
 #endif
 
-static uint8_t led_strip_pixels[LED_COUNT * 3];
+uint8_t led_strip_pixels[LED_COUNT * 3];
 rmt_channel_handle_t led_chan = NULL;
 rmt_tx_channel_config_t tx_chan_config = {
     .gpio_num = RMT_LED_STRIP_GPIO_NUM,
@@ -87,7 +91,7 @@ unsigned long millis() {
 }
 
 void delay(long ms) {
-  vTaskDelay(pdMS_TO_TICKS(2000));
+  vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
 void show() {
@@ -98,15 +102,16 @@ void setBrightness(uint8_t y) {
   bright_ratio = 128/y;
 }
 
-void setPixelColor(int i, uint8_t r, uint8_t g, uint8_t b) {
+inline void setPixelColor(int i, uint8_t r, uint8_t g, uint8_t b) {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-  led_strip_pixels[i * 3 + 0] = r/bright_ratio;
-  led_strip_pixels[i * 3 + 1] = g/bright_ratio;
+  led_strip_pixels[i * 3 + 0] = r;
+  led_strip_pixels[i * 3 + 1] = g;
+  led_strip_pixels[i * 3 + 2] = b;
 #else //ifdef CONFIG_IDF_TARGET_ESP32C3
-  led_strip_pixels[i * 3 + 0] = g/bright_ratio;
-  led_strip_pixels[i * 3 + 1] = r/bright_ratio;
+  led_strip_pixels[i * 3 + 0] = g;
+  led_strip_pixels[i * 3 + 1] = r;
+  led_strip_pixels[i * 3 + 2] = b;
 #endif
-  led_strip_pixels[i * 3 + 2] = b/bright_ratio;
 }
 
 void colorBlack() {
@@ -116,6 +121,9 @@ void colorBlack() {
 void colorBlink(uint8_t r, uint8_t g, uint8_t b, int wait) {
   int count = 3;
   uint16_t i;
+  r = r/bright_ratio;
+  g = g/bright_ratio;
+  b = b/bright_ratio;
   while (count--) {
     for(i=0; i<LED_COUNT; i++) setPixelColor(i, r, g, b);
     show();
@@ -128,10 +136,13 @@ void colorBlink(uint8_t r, uint8_t g, uint8_t b, int wait) {
 
 // Fill strip pixels one after another with a color. Strip is NOT cleared
 void colorWipe(uint8_t r, uint8_t g, uint8_t b, int wait) {
+  r = r/bright_ratio;
+  g = g/bright_ratio;
+  b = b/bright_ratio;
   for(int i=0; i<LED_COUNT; i++) { // For each pixel in strip...
     setPixelColor(i, r, g, b);       // Set pixel's color (in RAM)
     show();                          // Update strip to match
-    delay(wait);                           // Pause for a moment
+    delay(wait);                     // Pause for a moment
   }
 }
 
@@ -569,6 +580,9 @@ const uint8_t digitsMatrix[] = {
 
 void displayDigit(uint8_t r, uint8_t g, uint8_t b, uint8_t digit) {
   uint8_t x = 0;
+  r = r/bright_ratio;
+  g = g/bright_ratio;
+  b = b/bright_ratio;
   for (int i = 0; i < LED_COUNT; i++) {
     x = digitsMatrix[digit*LED_COUNT + i];
     setPixelColor(LED_COUNT-1-i, x*r, x*g, x*b);
@@ -583,7 +597,7 @@ void displayNumber(uint8_t r, uint8_t g, uint8_t b, uint8_t number) {
   if (r+g+b > 0) {
     for(int i=0; i<LED_COUNT; i++) {
       if (number < 13) break;
-      setPixelColor(i, 255, 255, 255);
+      setPixelColor(i, 255/bright_ratio, 255/bright_ratio, 255/bright_ratio);
       number -= 10;
     }
   }
@@ -594,11 +608,18 @@ void displaySignal(uint8_t signal) {
   displayDigit(0, 0, 255, signal);
 }
 
-void fillColor(uint8_t r, uint8_t g, uint8_t b) {
+void fillColorDirect(uint8_t r, uint8_t g, uint8_t b) {
   for (int i=0; i<LED_COUNT; i++) {
     setPixelColor(i, r, g, b);
   }
   show();
+}
+
+void fillColor(uint8_t r, uint8_t g, uint8_t b) {
+  r = r/bright_ratio;
+  g = g/bright_ratio;
+  b = b/bright_ratio;
+  fillColorDirect(r, g, b);
 }
 
 inline bool getBit(uint64_t bits, int i) {
@@ -616,11 +637,19 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
     uint64_t *preview_p = (uint64_t *)(data+1+sizeof(uint64_t));
     // uint8_t  *group_p   = (uint8_t *) (data+1+sizeof(uint64_t)+sizeof(uint64_t));
     // if (group_p <= data+len && *group_p != camGroup) return;
-    fillColor(
-      255*getBit(*program_p, camId-1),
-      255*getBit(*preview_p, camId-1),
-      0
-    );
+    // Show yellow for program+preview, red for program, green for preview, grey for idle
+    bool isProgram = getBit(*program_p, camId-1);
+    bool isPreview = getBit(*preview_p, camId-1);
+    
+    if (!isProgram && !isPreview) {
+      fillColorDirect(BACKGROUND_COLOR);
+    } else {
+      fillColor(
+        255*getBit(*program_p, camId-1),
+        255*getBit(*preview_p, camId-1),
+        0
+      );
+    }
     lastMessageReceived = millis();
 #ifdef DEBUG
     ESP_LOGI(TAG, "SET_TALLY");
@@ -831,7 +860,8 @@ void app_main() {
     sendHeartbeat();
     delay(2000);
     if (millis() - lastMessageReceived > 5000) {
-      fillColor(0, 0, 0);
+      fillColorDirect(BACKGROUND_COLOR);
+      // Paint one pixel red to signify we haven't received message
       setPixelColor(millis()%LED_COUNT, 128, 0, 0);
       show();
     }

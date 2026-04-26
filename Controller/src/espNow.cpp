@@ -165,6 +165,7 @@ void espnow_setup()
 
 void espnow_loop() {
   if (millis() - lastMessageAt > TALLY_UPDATE_EACH) {
+    // update tally each interval so new tallies catch up quickly
     espnow_tally();
     lastMessageAt = millis();
   }
