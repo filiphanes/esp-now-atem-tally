@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html><head><title>Tally bridge</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<style>
+*{box-sizing:border-box;}
+body{background-color:#101010;color:#e6e5df;margin:1rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+a{color:#777;margin-right:1rem;}
+.row{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0;max-width:31rem;}
+textarea{background:#000;border:0;padding:.5rem;color:#d0d0d0;width:30rem;max-width:100%;font-family:monospace;}
+button{line-height:2.5rem;text-align:center;width:2.5rem;background:#333;color:#FFF;border:0;border-radius:.5rem;cursor:pointer;}
+button:hover{background:#777;}
+button.set{width:7rem;padding:0 .7rem;}
+i{line-height:2.5rem;width:2.5rem;text-align:center;display:inline-block;background:#333;border-radius:.5rem;cursor:pointer;border:1px solid black;}
+i.pvw{background:green;}
+i.pgm{background:red;}
+i.sel{border:1px solid orange;}
+</style>
+</head><body>
+<div class="row"><a href="tally">Web Tally</a><a href="director">Director</a></div><br>
+<div class="row" id="cams"></div>
+<div class="row">
+<button onclick="camId()" class="set">Change camId</button>
+<span id="camMsg" style="padding:.7rem .7rem;"></span>
+</div>
+<div class="row">
+<button onclick="brightness()" class="set">Set brightness</button>
+<input type="range" id="brightness" placeholder="brightness" min="0" max="250" step="1" value="10"/>
+</div><br>
+<div class="row">
+<textarea id="cfg" rows="5" columns="40" placeholder="protocol://ip:port?param=value"></textarea>
+</div>
+<button onclick="save()" class="set">Save & Restart</button>
+<pre>Only first line is used, rest are your presets
+Examples:
+atem://192.168.88.240
+obs://192.168.88.50:4455
+vmix://192.168.88.10:8099
+</pre>
+<script>
+function $(id){return document.getElementById(id)}
+function inputs(){const ii=[];document.querySelectorAll('i.sel').forEach(e=>ii.push(e.innerText));return ii.join()}
+function post(u){var x=new XMLHttpRequest();x.open('post',u);x.send()}
+function put(u,v){var x=new XMLHttpRequest();x.open('put',u);x.send(v)}
+function selNone(){all_i.forEach(e=>e.classList.remove('sel'))}
+function iClick(e){
+  if(camIdMode){
+    var target=parseInt(e.currentTarget.textContent)
+    var old=document.querySelector('i.sel').textContent
+    post('/set?camid='+target+'&i='+old)
+    camIdMode=false
+    $('camMsg').textContent=''
+    all_i.forEach(x=>x.style.background='')
+    return
+  }
+  selNone();
+  e.currentTarget.classList.toggle('sel')
+}
+var camIdMode=false;
+function camId(){
+  if(camIdMode){
+    camIdMode=false;
+    $('camMsg').textContent='';
+    all_i.forEach(e=>e.style.background='');
+    return
+  }
+  if(document.querySelector('i.sel').length===0){
+    return
+  }
+  camIdMode=true;
+  $('camMsg').textContent='Click on new number';
+  all_i.forEach(e=>{
+    if(e.classList.contains('sel'))e.style.background='orange';
+    else e.classList.remove('sel'),e.style.background='#333';
+  })
+}
+function brightness(){post('/set?brightness='+$('brightness').value+'&i='+inputs())}
+function color(c){post('/set?color='+c.toString(16)+'&i='+inputs())}
+function signal(n){post('/set?signal='+n+'&i='+inputs())}
+function save(){localStorage.setItem('cfg',$('cfg').value);put('/config',$('cfg').value)}
+const ws=new WebSocket('ws://'+(location.host||'tally.local').replace(/^http/,'ws')+':81');
+ws.onopen=function(){console.log('ws connected')};
+ws.onmessage=function(e){
+  if(e.data.startsWith('TALLY ')){
+    var t=e.data.slice(6);all_i.forEach((e,i)=>{
+      var s=t[i]||'0';
+      if(s=='1'||s=='3')e.classList.add('pgm');else e.classList.remove('pgm');
+      if(s=='2'||s=='3')e.classList.add('pvw');else e.classList.remove('pvw');
+    })
+  }
+};
+ws.onclose=function(){setTimeout(function(){location.reload()},1e3)};
+var d=$('cams');
+for(var i=1;i<=20;i++){
+  var x=document.createElement('i');
+  x.textContent=i;
+  x.addEventListener('click',iClick)
+  d.appendChild(x)
+}
+const all_i=document.querySelectorAll('i');
+var c=new XMLHttpRequest()
+c.open('get','config')
+c.onload=()=>{$('cfg').value=c.responseText}
+c.onerror=console.log
+c.send()
+</script>
+</body></html>

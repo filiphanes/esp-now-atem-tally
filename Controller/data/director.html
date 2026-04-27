@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html><head><title>Director</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<style>
+*{box-sizing:border-box;}
+body{background-color:#101010;color:#e6e5df;margin:1rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+a{color:#777;margin-right:1rem;}
+.row{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0;max-width:30rem;}
+button{line-height:2.5rem;text-align:center;width:2.5rem;background:#333;color:#FFF;border:0;border-radius:.5rem;cursor:pointer;font-size:1.2;}
+button:hover{background:#777;}
+button.set{width:auto;padding:0 .7rem;}
+i{line-height:2.5rem;width:2.5rem;text-align:center;display:inline-block;background:#333;border-radius:.5rem;cursor:pointer;border:1px solid black;}
+i.pvw{background:green;}
+i.pgm{background:red;}
+i.sel{border:1px solid orange;}
+</style>
+</head><body>
+<a href="/">Config</a>
+<a href="/tally">Tally</a><br>
+<div class="row">
+<button onclick="signal(13)">&larr;</button>
+<button onclick="signal(14)">&darr;</button>
+<button onclick="signal(15)">&uarr;</button>
+<button onclick="signal(16)">&rarr;</button>
+<button onclick="signal(12)">&times;</button>
+<button onclick="signal(17)">F</button>
+<button onclick="signal(18)">B</button>
+<button onclick="signal(19)">Z</button>
+<button onclick="signal(20)" style="transform:scaleX(-1);">Z</button>
+<button onclick="signal(21)">I+</button>
+<button onclick="signal(22)">I-</button>
+<button onclick="signal(23)">&check;</button>
+<button onclick="color(0xFF0000)" style="color:red;">&#9632;</button>
+<button onclick="color(0x00FF00)" style="color:green;">&#9632;</button>
+<button onclick="color(0x0000FF)" style="color:blue;">&#9632;</button>
+<button onclick="color(0xFFFF00)" style="color:yellow;">&#9632;</button>
+<button onclick="color(0xFFFFFF)" style="color:white;">&#9632;</button>
+</div><br>
+<div class="row" id="cams"></div>
+<div class="row">
+<button onclick="selNone()">&empty;</button>
+<button onclick="selAll()">&forall;</button>
+</div>
+<script>
+function $(id){return document.getElementById(id)}
+const cams=$('cams');
+for(var i=1;i<=20;i++){
+  var x=document.createElement('i')
+  x.textContent=i
+  x.addEventListener('click',iClick)
+  cams.appendChild(x)
+}
+const all_i=document.querySelectorAll('i');
+const ws=new WebSocket('ws://'+(location.host||'tally.local').replace(/^http/,'ws')+':81');
+function inputs(){const ii=[];document.querySelectorAll('i.sel').forEach(e=>ii.push(e.innerText));return ii.join()}
+function post(u){var x=new XMLHttpRequest();x.open('post',u);x.send()}
+function selNone(){all_i.forEach(e=>e.classList.remove('sel'))}
+function selAll(){all_i.forEach(e=>e.classList.add('sel'))}
+function iClick(e){
+  selNone()
+  e.currentTarget.classList.toggle('sel')
+}
+function color(c){post('/set?color='+c.toString(16)+'&i='+inputs())}
+function signal(n){post('/set?signal='+n+'&i='+inputs())}
+ws.onmessage=function(e){
+  if(e.data.startsWith('TALLY ')){
+    var t=e.data.slice(6);
+    all_i.forEach((e,i)=>{
+      const s=t[i]||'0'
+      const c=e.classList
+      if(s=='1'||s=='3')c.add('pgm');else c.remove('pgm');
+      if(s=='2'||s=='3')c.add('pvw');else c.remove('pvw');
+    })
+  }
+};
+ws.onclose=function(){setTimeout(function(){location.reload()},1e3)};
+</script>
+</body></html>

@@ -14,8 +14,8 @@ inline uint64_t bitn(uint8_t n) {
 
 void vmix_setup() {
   Serial.print("VMIX IP:");
-  Serial.println(IPAddress(config.vmixIP).toString());
-  if (tcpclient.connect(config.vmixIP, config.vmixPort)) {
+  Serial.println(config.ip.toString());
+  if (tcpclient.connect(config.ip, config.port)) {
     Serial.print("SUBSCRIBE TALLY\r\n");
     tcpclient.print("SUBSCRIBE TALLY\r\n");
   }

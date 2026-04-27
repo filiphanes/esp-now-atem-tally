@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+<title>Tally</title>
+<style>*{box-sizing:border-box;margin:0;padding:0;}
+body{color:grey;display:flex;flex-direction:column;align-items:center;justify-content:center;background:black;height:100vh;font-family:Arial;}
+#camId{font-size:30vw;text-shadow:0 0 20px rgba(0,0,0,.8);margin-bottom:10vh;}
+button{color:grey;width:15vw;height:15vw;max-width:100px;max-height:100px;margin:1vw;background:transparent;border:0;border-radius:50%;font-size:4vw;-webkit-tap-highlight-color:transparent;}
+#signal{color:white;font-size:30vw;}
+</style>
+</head>
+<body>
+<div id="camId">1</div>
+<div id="signal">&#9888;</div>
+<button onclick="chg(1)">+</button>
+<button onclick="chg(-1)">-</button>
+<button onclick="toggleFS()">&#x26F6;</button>
+<script>
+const signal=document.getElementById('signal')
+const colors=['black','red','green','yellow']
+const signals=[
+"&times;",
+"&larr;",
+"&darr;",
+"&uarr;",
+"&rarr;",
+"Focus",
+"Blur",
+"Zoom",
+'UnZoom',
+"ISO+",
+"ISO-",
+"&check;",
+];
+let camId=parseInt(localStorage.getItem('camId'))||1
+let tally=''
+let ws;
+chg(0)
+function connect(){
+ if (ws) ws.close()
+ ws=new WebSocket('ws://'+(location.host||'tally.local').replace(/^http/,'ws')+':81')
+ ws.onmessage=e=>{
+   const p=e.data.split(' ')
+   if(p[0]=='TALLY'){
+     tally=p[1]
+     show()
+   } else if(p[0]=='SIGNAL'){
+     if(inCsv(p[2])){
+       signal.innerHTML=signals[+p[1]-12]||p[1]
+       setTimeout(()=>{signal.innerHTML=''},2000)
+     }
+   } else if(p[0]=='CAMID'){
+     if(inCsv(p[2])) camId=parseInt(p[1])
+   } else if(p[0]=='COLOR'){
+     if(inCsv(p[2])) document.body.style.background='#'+p[1]
+   }
+   clearTimeout(wTimer)
+   wTimer=setTimeout(showWarning,3000)
+ }
+ ws.onclose=()=>{signal.innerHTML='&#9888;';setTimeout(()=>location.reload(),3000)}
+ ws.onopen=()=>{show();signal.innerHTML=''}
+ ws.onerror=showWarning
+}
+connect()
+function showWarning(){
+  signal.innerHTML='&#9888;'
+  wTimer=setInterval(connect,2000)
+}
+let wTimer=setTimeout(showWarning,5000);
+function inCsv(csv){return csv.split(',').includes(''+camId)}
+function show(){document.body.style.background=colors[tally[camId-1]||'0']||colors[0]}
+function chg(delta){
+  camId+=delta
+  if(camId<1)camId=64
+  else if(camId>64)camId=1
+  document.getElementById('camId').textContent=camId
+  localStorage.setItem('camId',camId)
+  show()
+}
+function toggleFS(){
+ if (document.fullscreen) closeFullscreen(document)
+ else openFullscreen(document.documentElement)
+}
+function openFullscreen(e) {
+ if (e.requestFullscreen) e.requestFullscreen()
+ else if (e.webkitRequestFullscreen) e.webkitRequestFullscreen()
+ else if (e.msRequestFullscreen) e.msRequestFullscreen()
+}
+function closeFullscreen(d) {
+ if (d.exitFullscreen) d.exitFullscreen()
+ else if (d.webkitExitFullscreen) d.webkitExitFullscreen()
+ else if (d.msExitFullscreen) d.msExitFullscreen()
+}
+document.addEventListener('keydown',e=>{
+ if(e.key==='ArrowLeft'||e.key==='-')chg(-1)
+ else if(e.key==='ArrowRight'||e.key==='+')chg(1)
+ else if(e.key==='f')toggleFS()
+})
+</script></body></html>

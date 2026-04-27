@@ -5,6 +5,7 @@
 
 #include "atem.h"
 #include "espnow.h"
+#include "configWebserver.h"
 #include "vmixServer.h"
 
 #define MAX_TALLY_COUNT 64
@@ -35,6 +36,7 @@ void espnow_tally(uint64_t *program, uint64_t *preview) {
   previewBits = *preview;
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
   vmix_tally(program, preview);
+  ws_tally();
 }
 
 void switchCamId(uint8_t id1, uint8_t id2) {
@@ -159,16 +161,12 @@ void espnow_setup()
   for (int i=0; i<MAX_TALLY_COUNT; i++) {
     tallies[i].id = 0;
   }
-
-  vmixServerSetup();
 }
 
 void espnow_loop() {
   if (millis() - lastMessageAt > TALLY_UPDATE_EACH) {
-    // update tally each interval so new tallies catch up quickly
     espnow_tally();
     lastMessageAt = millis();
   }
-
-  vmixServerLoop();
 }
+
