@@ -2,7 +2,7 @@
 #include "espnow.h"
 #include "osc.h"
 
-#define OSC_PORT 8000
+#define OSC_PORT 57110
 #define MAX_OSC_PACKET_SIZE 512
 
 WiFiUDP oscUDP;
@@ -165,7 +165,7 @@ void osc_parsePacket() {
 
 void osc_setup() {
   oscUDP.begin(OSC_PORT);
-  Serial.printf("OSC server started on port %d\n", OSC_PORT);
+  Serial.printf("OSC listening on port %d\n", OSC_PORT);
 }
 
 void osc_loop() {

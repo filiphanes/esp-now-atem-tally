@@ -10,17 +10,15 @@ enum switcher_protocol : uint8_t {
 
 struct controller_config {
     switcher_protocol protocol = PROTOCOL_ATEM;
+    IPAddress ip = {192, 168, 88, 240};
+    uint16_t port = 9910;
     uint8_t group = 1;
-    uint32_t atemIP = (192<<24)+(168<<16)+(2<<8)+240;
-    uint16_t atemPort = 9910;
-    uint32_t obsIP = (192<<24)+(168<<16)+(2<<8)+18;
-    uint16_t obsPort = 4455;
-    uint32_t vmixIP = (192<<24)+(168<<16)+(2<<8)+18;
-    uint16_t vmixPort = 8099;
-    uint32_t bgColor = 0x001E1E;
+    uint32_t bg = 0x000000;
+    String user;
+    String password;
 };
 
 extern struct controller_config config;
 
-void readConfig();
-void writeConfig();
+String readConfig();
+void writeConfig(const String& s);

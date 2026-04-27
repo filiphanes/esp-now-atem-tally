@@ -4,6 +4,7 @@
 - vMix TCP Tally
 - supports 64 tallies (even with ATEM)
 - since largest ATEM has 40 sources, camIds 41-64 can be used for sum tallies
+- ESP-NOW long range mode (WIFI_PROTOCOL_LR)
 
 # Hardware
 - WT32-ETH01 (recommended)
@@ -31,6 +32,9 @@ The controller runs a TCP server on port 8099 that receivers can connect to. Cli
 # HTTP API
 
 ## GET /tally
+Serves the Web Tally page (HTML)
+
+## GET /tally.json
 Returns current tally state as JSON:
 ```json
 {"program":4,"preview":8}
@@ -53,12 +57,10 @@ Configure tallies. Query parameters (can combine multiple):
 - `/set?camid=7&i=8` - Tally 8 responds to camera 7
 
 ### Signal (manual tally)
-`/set?signal=1-25&i=N` - Send signal to tally N
-- Signal 12 = off, 13 = left, 14 = down, 15 = up, 16 = right
-- Signal 17 = freeze, 18 = brightness+, 19 = brightness-, 20 = zoom+, 21 = zoom-
-
-### Program/Preview override
-`/set?program=1&preview=1&i=N` - Manually set program/preview state
+`/set?signal=12-23&i=N` - Send signal to tally N
+- 12 = off, 13 = left, 14 = down, 15 = up, 16 = right
+- 17 = freeze, 18 = brightness+, 19 = brightness-
+- 20 = zoom+, 21 = intercom+, 22 = intercom-, 23 = check
 
 ## GET /seen
 Returns list of connected tallies and their last-seen time:
@@ -68,11 +70,11 @@ Returns list of connected tallies and their last-seen time:
 
 # Configuration
 Configure via web UI:
-- Protocol: ATEM, OBS, or vMix
-- IP: Switcher IP address
-- Port: Connection port (for OBS/vMix)
-- Group: ESP-NOW group (1-9, broadcasts to all if empty)
-- Bg: Background color in hex (e.g., 001E1E for dark grey)
+- protocol: ATEM, OBS, or vMix
+- ip: Switcher IP address
+- port: Connection port (for OBS/vMix)
+- group: ESP-NOW group (1-9, broadcasts to all if empty)
+- bg: Background color in hex (e.g., 001E1E for dark grey)
 
 # OSC Protocol
 UDP server on port 8000. Supports:
@@ -107,3 +109,45 @@ Set tally N brightness to full
 ## /id,N
 Set tally N camera ID
 - `/id,8` - Set tally 8 camera ID
+
+# WebSocket API
+Server on port 81. Broadcasts real-time updates:
+
+## TALLY
+`TALLY 000...032...` - Each char: 0=idle, 1=program, 2=preview, 3=both
+
+## Settings Broadcast
+When settings change via HTTP API, broadcasts are sent:
+- `CAMID 7 8` - Camera ID 7 mapped to tally 8
+- `BRIGHTNESS 128 8` - Brightness set to 128 for tally 8
+- `COLOR FF0000 8` - Color set to red for tally 8
+- `SIGNAL 12 8` - Signal sent to tally 8
+
+# Web Interfaces
+
+## Director Page (`/director`)
+Web interface for directors to control tallies:
+- Signal buttons: ← ↓ ↑ → (nav), × (off), F (freeze), B (brightness), Z (zoom), I+/I- (intercom), ✓ (check)
+- Color buttons: red, green, blue, yellow, white
+- Tally status display (red=program, green=preview)
+- Select tallies by clicking, then press button to send command
+
+## Web Tally (`/tally`)
+Self-contained tally display page:
+- Shows program (red) and preview (green) status
+- Updates via WebSocket
+- Useful as a browser-based tally
+
+# Configuration
+
+## URI Scheme
+Configure via URI string (save with PUT /config):
+- `atem://192.168.88.240` - ATEM switcher
+- `obs://192.168.88.50:4455` - OBS WebSocket
+- `vmix://192.168.88.10:8099` - vMix TCP
+- `atem://192.168.88.240?bg=1E1E1E` - With background color
+
+Supports multiple presets (only first line is active, rest are saved as presets).
+
+## mDNS
+Access the controller via `http://tally.local` (hostname: "tally", instance: "TallyBridge")

@@ -146,7 +146,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
 
 void obs_setup() {
   char uri[64];
-  sprintf(uri, "ws://%s", inet_ntoa(config.obsIP), config.obsPort);
+  sprintf(uri, "ws://%s:%d", config.ip.toString().c_str(), config.port);
   Serial.printf("obs_setup %s\n", uri);
   const esp_websocket_client_config_t ws_cfg = {
     .uri = uri,
@@ -158,8 +158,12 @@ void obs_setup() {
 
 void obs_loop() {
   espnow_loop();
-  if (!esp_websocket_client_is_connected(client)) {
+  if (client && !esp_websocket_client_is_connected(client)) {
+    esp_websocket_client_stop(client);
     esp_websocket_client_destroy(client);
+    client = NULL;
+  }
+  if (!client && config.ip != 0) {
     obs_setup();
   }
 }
