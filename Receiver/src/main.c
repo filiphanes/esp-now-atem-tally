@@ -10,6 +10,7 @@
 #include "led_strip_encoder.h"
 #include "nvs_flash.h"
 #include "esp_timer.h"
+#include "esp_pm.h"
 
 static const char *TAG = "tally";
 #define DEBUG 1
@@ -23,6 +24,15 @@ static const char *TAG = "tally";
 
 // Keep minumum current so powerbank will not shutoff
 #define BACKGROUND_COLOR 0,0,0
+
+// Explicit ESP-NOW power-save.
+// The receiver is always listening by default (no implicit duty-cycling). When
+// the Controller finishes a burst it sends SLEEP(ms): we may then power down
+// the radio for `ms` because the Controller promises to stay silent for that
+// long. sleep_request_ms is latched by the receive callback (which runs in the
+// WiFi task and must not block) and consumed by app_main, which performs the
+// actual sleep. See receiver_sleep().
+volatile uint16_t sleep_request_ms = 0;
 
 
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
@@ -71,6 +81,8 @@ typedef enum {
   SET_BRIGHTNESS = 7,
   SHOW_SIGNAL = 8,
   SET_CAMGROUP = 9,
+  // 10 was SET_WAKE (implicit receiver duty-cycle, removed).
+  SLEEP = 11,  // [cmd][dur_lo][dur_hi]: receiver may sleep `dur` ms
 
   SIGNAL_CHANGE = 12,
   SIGNAL_LEFT = 13,
@@ -204,6 +216,29 @@ void writeCamId() {
 void writeCamGroup() {
   if (nvs_set_u8(nvs_tally_handle, "camGroup", camGroup) != ESP_OK)
     ESP_LOGI(TAG, "writeCamGroup failed!");
+}
+
+// ---- Explicit receiver sleep (SLEEP command) ----
+// Power down the radio for `ms`. We reuse the connectionless ESP-NOW sleep
+// primitive (the proven way to let the WiFi modem sleep while ESP-NOW stays
+// registered): shrink the RX wake window so the modem sleeps between brief
+// wakeups, block for `ms` (esp_pm light-sleeps inside vTaskDelay), then
+// restore always-on RX. The Controller guarantees no TX during `ms`.
+#define SLEEP_WAKE_INTERVAL_MS 100   // connectionless wake cadence while sleeping
+#define SLEEP_WAKE_WINDOW_MS   2     // minimal RX window while sleeping
+
+void receiver_sleep(uint16_t ms) {
+  esp_err_t e1 = esp_wifi_connectionless_module_set_wake_interval(SLEEP_WAKE_INTERVAL_MS);
+  esp_err_t e2 = esp_now_set_wake_window(SLEEP_WAKE_WINDOW_MS);
+  ESP_LOGI(TAG, "sleep %ums (interval=%u window=%u: %s/%s)", ms,
+           SLEEP_WAKE_INTERVAL_MS, SLEEP_WAKE_WINDOW_MS,
+           esp_err_to_name(e1), esp_err_to_name(e2));
+  unsigned long end = millis() + ms;
+  while ((long)(millis() - end) < 0) {
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+  // Restore always-on RX (window >= interval => listen all the time).
+  esp_now_set_wake_window(0xFFFF);
 }
 
 #if LED_COUNT==25
@@ -629,7 +664,9 @@ inline bool getBit(uint64_t bits, int i) {
 // Callback function that will be executed when data is received
 static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
   espnow_command command = (espnow_command)data[0];
+#ifdef DEBUG
   ESP_LOGI(TAG, "<[%d] ", command);
+#endif
   switch (command) {
 
   case SET_TALLY: {
@@ -712,6 +749,17 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
     uint64_t brightness = data[1];
     if (getBit(*bits_p, camId-1)) {
       setBrightness(brightness);
+    }
+    lastMessageReceived = millis();
+    break;
+  }
+
+  case SLEEP: {
+    // [cmd][dur_lo][dur_hi]: the Controller says we may sleep `dur` ms.
+    // This callback runs in the WiFi task, so only latch the request here;
+    // app_main performs the actual sleep.
+    if (len >= 3) {
+      sleep_request_ms = data[1] | (data[2] << 8);
     }
     lastMessageReceived = millis();
     break;
@@ -807,11 +855,31 @@ static void wifi_init(void)
     ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK( esp_wifi_start());
     ESP_ERROR_CHECK( esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
-    ESP_ERROR_CHECK( esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR) );
+    // Use Long-Range only, matching the Controller (LR-only). This drops
+    // 11g/11n which kept the RF front-end in a higher-power RX state, and LR
+    // actually extends range. Both ends must use the same protocol mask.
+    ESP_ERROR_CHECK( esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR) );
 }
 
 void app_main() {
   esp_err_t err;
+
+  // Power management: cap CPU at 80 MHz and allow light sleep when idle.
+  // Requires CONFIG_PM_ENABLE=y in sdkconfig. The WiFi driver still holds a
+  // PM lock while the radio is awake (we keep PS_NONE), so packets are not
+  // missed; the CPU still underclocks and halts between activity. Enable WiFi
+  // power-save (WIFI_PS_MIN_MODEM) later to also let the radio sleep.
+  esp_pm_config_t pm_config = {
+      .max_freq_mhz = 80,
+      .min_freq_mhz = 80,
+      .light_sleep_enable = true,
+  };
+  esp_err_t pm_err = esp_pm_configure(&pm_config);
+  if (pm_err != ESP_OK) {
+      ESP_LOGW(TAG, "esp_pm_configure failed: %s (enable CONFIG_PM_ENABLE)",
+               esp_err_to_name(pm_err));
+  }
+
   ESP_LOGI(TAG, "rmt_new_tx_channel");
   ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_chan_config, &led_chan));
   ESP_LOGI(TAG, "rmt_new_led_strip_encoder");
@@ -855,10 +923,24 @@ void app_main() {
   // ESP_ERROR_CHECK( esp_now_register_send_cb(espnow_send_cb) );
   ESP_ERROR_CHECK( esp_now_register_recv_cb(espnow_recv_cb) );
 
+  // Receiver is always-on by default and only powers down its radio when told
+  // to via SLEEP. Nothing to configure at boot.
+
   // Loop
   while (1) {
-    sendHeartbeat();
-    delay(2000);
+    // Explicit sleep: the Controller sent SLEEP(ms). app_main is the only place
+    // we may block, so consume the request here (the recv cb just latches it).
+    if (sleep_request_ms > 0) {
+      uint16_t dur = sleep_request_ms;
+      sleep_request_ms = 0;
+      receiver_sleep(dur);
+      lastMessageReceived = millis();   // just woke from a controller-ordered sleep
+      continue;
+    }
+    // Heartbeat disabled to cut TX activity / heat. The controller re-sends
+    // SET_TALLY on every change, so receiver presence detection is optional.
+    // Re-enable with sendHeartbeat(); here if discovery is needed.
+    delay(50);
     if (millis() - lastMessageReceived > 5000) {
       fillColorDirect(BACKGROUND_COLOR);
       // Paint one pixel red to signify we haven't received message
