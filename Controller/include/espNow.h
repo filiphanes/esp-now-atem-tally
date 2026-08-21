@@ -16,6 +16,8 @@ enum espnow_command : uint8_t {
   SET_COLOR = 6,
   SET_BRIGHTNESS = 7,
   SET_SIGNAL = 8,
+  // 10 was SET_WAKE (receiver-side implicit duty-cycle, removed).
+  SLEEP = 11,  // [cmd][dur_lo][dur_hi]: receiver may sleep `dur` ms; controller stays silent
 };
 
 typedef struct esp_now_tally_info {
@@ -35,3 +37,4 @@ void espnow_signal(uint8_t signal, uint64_t *bits);
 void espnow_tally();
 void espnow_tally(uint64_t *program, uint64_t *preview);
 void espnow_tally_test(int pgm, int pvw);
+void espnow_sleep_all(uint16_t ms);

@@ -38,6 +38,10 @@ i.sel{border:1px solid orange;}
 </div><br>
 <div class="row" id="cams"></div>
 <div class="row">
+<button class="set" style="background:#7a1f1f;" onclick="cut()" title="OBS cut to selected scene">CUT</button>
+<button class="set" style="background:#1f5c1f;" onclick="auto()" title="OBS auto-transition to selected scene">AUTO</button>
+</div>
+<div class="row">
 <button onclick="selNone()">&empty;</button>
 <button onclick="selAll()">&forall;</button>
 </div>
@@ -62,6 +66,8 @@ function iClick(e){
 }
 function color(c){post('/set?color='+c.toString(16)+'&i='+inputs())}
 function signal(n){post('/set?signal='+n+'&i='+inputs())}
+function cut(){post('/cut?i='+inputs())}
+function auto(){post('/auto?i='+inputs())}
 ws.onmessage=function(e){
   if(e.data.startsWith('TALLY ')){
     var t=e.data.slice(6);

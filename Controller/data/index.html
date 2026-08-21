@@ -14,6 +14,9 @@ i{line-height:2.5rem;width:2.5rem;text-align:center;display:inline-block;backgro
 i.pvw{background:green;}
 i.pgm{background:red;}
 i.sel{border:1px solid orange;}
+input[type=number]{background:#000;color:#d0d0d0;border:1px solid #333;border-radius:.3rem;padding:.2rem;width:4rem;font-family:monospace;}
+.power b{font-size:.9rem;color:#aaa;}
+.power label{display:flex;flex-direction:column;font-size:.75rem;color:#999;margin-right:.6rem;gap:.2rem;}
 </style>
 </head><body>
 <div class="row"><a href="tally">Web Tally</a><a href="director">Director</a></div><br>
@@ -24,7 +27,7 @@ i.sel{border:1px solid orange;}
 </div>
 <div class="row">
 <button onclick="brightness()" class="set">Set brightness</button>
-<input type="range" id="brightness" placeholder="brightness" min="0" max="250" step="1" value="10"/>
+<input type="range" id="brightness" placeholder="brightness" min="0" max="128" step="1" value="10"/>
 </div><br>
 <div class="row">
 <textarea id="cfg" rows="5" columns="40" placeholder="protocol://ip:port?param=value"></textarea>
@@ -36,6 +39,21 @@ atem://192.168.88.240
 obs://192.168.88.50:4455
 vmix://192.168.88.10:8099
 </pre>
+<div class="row power" style="max-width:40rem;">
+  <div class="row" style="margin:0"><b>Tally power / responsiveness (receiver sleep)</b></div>
+  <div class="row" style="margin:.3rem 0">
+    <label>sleep&nbsp;ms<input type="number" id="ws" min="0" max="60000" step="100" value="0"/></label>
+    <label>burst&nbsp;ms<input type="number" id="wb" min="20" max="65535" step="10" value="300"/></label>
+    <label>gap&nbsp;ms<input type="number" id="wg" min="5" max="2000" step="1" value="20"/></label>
+  </div>
+  <div class="row" style="margin:0">
+    <button onclick="applyPower()" class="set">Apply power</button>
+    <span id="powerMsg" style="padding:.7rem;font-size:.75rem;color:#999"></span>
+  </div>
+  <div class="row" style="margin:.2rem 0;font-size:.7rem;color:#666;max-width:40rem">
+    After each tally burst the controller sends SLEEP(sleep&nbsp;ms); receivers power down their radio for that long, then listen again. Set <b>sleep&nbsp;ms = 0</b> to keep receivers always-on (no sleeping, default). Coordinator enforces burst&nbsp;≥ gap. Apply takes effect on the next burst; no reboot needed.
+  </div>
+</div>
 <script>
 function $(id){return document.getElementById(id)}
 function inputs(){const ii=[];document.querySelectorAll('i.sel').forEach(e=>ii.push(e.innerText));return ii.join()}
@@ -97,10 +115,25 @@ for(var i=1;i<=20;i++){
   d.appendChild(x)
 }
 const all_i=document.querySelectorAll('i');
+function applyPower(){
+  var s='ws='+$('ws').value+'&wb='+$('wb').value+'&wg='+$('wg').value;
+  var x=new XMLHttpRequest();x.open('put','/power');
+  x.onload=function(){loadPower();$('powerMsg').textContent='applied';setTimeout(function(){$('powerMsg').textContent=''},1500)};
+  x.send(s)
+}
+function loadPower(){
+  var x=new XMLHttpRequest();x.open('get','/power');
+  x.onload=function(){
+    var p={};x.responseText.split('&').forEach(function(kv){var a=kv.split('=');p[a[0]]=a[1]});
+    if(p.ws)$('ws').value=p.ws;if(p.wb)$('wb').value=p.wb;if(p.wg)$('wg').value=p.wg;
+  };
+  x.send()
+}
 var c=new XMLHttpRequest()
 c.open('get','config')
 c.onload=()=>{$('cfg').value=c.responseText}
 c.onerror=console.log
 c.send()
+loadPower()
 </script>
 </body></html>
