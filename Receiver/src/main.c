@@ -11,6 +11,7 @@
 #include "nvs_flash.h"
 #include "esp_timer.h"
 #include "esp_pm.h"
+#include "driver/gpio.h"
 
 static const char *TAG = "tally";
 #define DEBUG 1
@@ -40,11 +41,20 @@ volatile uint16_t sleep_request_ms = 0;
  #define RMT_LED_STRIP_GPIO_NUM  14
  #define LED_COUNT  64
  #define DEFAULT_BRIGHTNESS 2  // 0-255
+ // BOOT button on most ESP32-S3 dev/feather boards (active-low, pull-up)
+ #define BUTTON_GPIO_NUM  0
 #else //elifdef CONFIG_IDF_TARGET_ESP32C3
  #define RMT_LED_STRIP_GPIO_NUM  8
  #define LED_COUNT  25
  #define DEFAULT_BRIGHTNESS 10  // 0-255
+ // BOOT button on ESP32-C3 DevKitM (active-low, pull-up)
+ #define BUTTON_GPIO_NUM  9
 #endif
+
+// On-board button cycles camId through this range and persists it to NVS.
+#define CAMID_MIN 1
+#define CAMID_MAX 10
+#define BUTTON_DEBOUNCE_MS 250   // min ms between accepted presses
 
 uint8_t led_strip_pixels[LED_COUNT * 3];
 rmt_channel_handle_t led_chan = NULL;
@@ -106,12 +116,73 @@ void delay(long ms) {
   vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
+// ---- On-board button (cycle camId) ----
+// Uses the BOOT button already present on the dev boards, so no extra wiring
+// is required. It is active-low with the internal pull-up enabled. We poll it
+// from the main loop (which already sleeps ~50ms per iteration) and debounce
+// on the falling (press) edge.
+// Forward declarations: writeCamId() and displayNumber() are defined below.
+void writeCamId(void);
+void displayNumber(uint8_t r, uint8_t g, uint8_t b, uint8_t number);
+static int button_last_state = 1;  // 1 = not pressed (pull-up)
+static uint32_t button_last_press_ms = 0;
+
+void button_init() {
+  gpio_config_t io_conf = {
+    .pin_bit_mask = (1ULL << BUTTON_GPIO_NUM),
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_ENABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE,
+  };
+  esp_err_t err = gpio_config(&io_conf);
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "button gpio_config failed: %s", esp_err_to_name(err));
+  }
+}
+
+// Returns true exactly once per (debounced) press. Call this from the main loop.
+bool button_pressed() {
+  int state = gpio_get_level(BUTTON_GPIO_NUM);
+  bool pressed = false;
+  if (state == 0 && button_last_state == 1) {  // falling edge
+    if (millis() - button_last_press_ms > BUTTON_DEBOUNCE_MS) {
+      button_last_press_ms = millis();
+      pressed = true;
+    }
+  }
+  button_last_state = state;
+  return pressed;
+}
+
+// Cycle camId CAMID_MIN..CAMID_MAX, persist to NVS, and flash the new number.
+void cycle_camid() {
+  camId++;
+  if (camId > CAMID_MAX || camId < CAMID_MIN) camId = CAMID_MIN;
+  writeCamId();
+  nvs_commit(nvs_tally_handle);  // make sure the new id survives reboot
+  displayNumber(0, 0, 255, camId);
+  // Keep the number on screen briefly even if no tally messages arrive:
+  // suppress the "no signal" red-pixel blink for a moment.
+  lastMessageReceived = millis();
+  ESP_LOGI(TAG, "button: camId -> %d", camId);
+}
+
 void show() {
   ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
 }
 
+// y arrives from the UI slider (0..250). bright_ratio is a DIVISOR applied to
+// every color channel below, so y=128 passes colors through unchanged and
+// y<128 dims them. y>128 used to give bright_ratio = 128/y = 0, and
+// "color / 0" is 0xFFFFFFFF on RISC-V (ESP32-C3) / UB on Xtensa, truncating
+// to 255 per channel => white instead of red/green. Clamp y to [1,128] so the
+// divisor is always >= 1. Capping at 128 loses nothing: tally channels are 0 or
+// 255, so boosting above unity just clamps right back to 255.
 void setBrightness(uint8_t y) {
-  bright_ratio = 128/y;
+  if (y == 0) y = 1;
+  else if (y > 128) y = 128;
+  bright_ratio = 128 / y;
 }
 
 inline void setPixelColor(int i, uint8_t r, uint8_t g, uint8_t b) {
@@ -208,7 +279,7 @@ void readCamGroup() {
   ESP_LOGI(TAG, "camGroup: %d", camGroup);
 }
 
-void writeCamId() {
+void writeCamId(void) {
   if (nvs_set_u8(nvs_tally_handle, "camId", camId) != ESP_OK)
     ESP_LOGI(TAG, "writeCamId failed!");
 }
@@ -888,6 +959,9 @@ void app_main() {
   ESP_ERROR_CHECK(rmt_enable(led_chan));
   // testDigits();
 
+  ESP_LOGI(TAG, "button_init (GPIO %d)", BUTTON_GPIO_NUM);
+  button_init();
+
   // Initialize NVS
   err = nvs_flash_init();
   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -928,6 +1002,10 @@ void app_main() {
 
   // Loop
   while (1) {
+    // On-board button: cycle camId 1..10 and persist to NVS.
+    if (button_pressed()) {
+      cycle_camid();
+    }
     // Explicit sleep: the Controller sent SLEEP(ms). app_main is the only place
     // we may block, so consume the request here (the recv cb just latches it).
     if (sleep_request_ms > 0) {

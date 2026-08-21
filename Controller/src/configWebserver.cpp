@@ -1,4 +1,6 @@
 #include "configWebserver.h"
+#include "obs.h"
+#include "atem.h"
 
 WebServer web(80);
 WebSocketsServer wsServer(81);
@@ -93,6 +95,48 @@ void handleSet() {
   web.send(200, "text/plain", "OK");
 }
 
+uint8_t firstSelectedTally(String csv) {
+  uint64_t bits = bitsFromCSV(csv);
+  for (int b = 1; b <= 64; b++) {
+    if (bits & bitn(b)) return b;
+  }
+  return 0;
+}
+
+void handleSwitch(bool autoTransition) {
+  uint8_t n = firstSelectedTally(web.arg("i"));
+  if (n == 0) {
+    web.send(400, "text/plain", "Missing i");
+    return;
+  }
+  if (config.protocol == PROTOCOL_OBS) {
+    obs_switch_scene(n, autoTransition);
+  } else if (config.protocol == PROTOCOL_ATEM) {
+    atem_switch_scene(n, autoTransition);
+  } else {
+    web.send(400, "text/plain", "Protocol has no switch action");
+    return;
+  }
+  web.send(200, "text/plain", "OK");
+}
+
+void handleCut()  { handleSwitch(false); }
+void handleAuto() { handleSwitch(true);  }
+
+void handlePower() {
+  if (web.method() == HTTP_PUT) {
+    String body = web.arg(0);
+    body.trim();
+    Serial.println("PUT /power: [" + body + "]");
+    applyPowerConfigStr(body);          // clamp + populate config.*
+    writePowerConfig(body);             // persist as-is
+    // sleep_ms takes effect on the next burst; nothing to push to receivers.
+    web.send(200, "text/plain", powerConfigStr());
+  } else if (web.method() == HTTP_GET) {
+    web.send(200, "text/plain", powerConfigStr());
+  }
+}
+
 void handleConfig() {
   if (web.method() == HTTP_PUT) {
     String body = web.arg(0);
@@ -169,6 +213,9 @@ void setupWebserver() {
   web.on("/set", handleSet);
   web.on("/seen", handleSeen);
   web.on("/config", handleConfig);
+  web.on("/power", handlePower);
+  web.on("/cut", handleCut);
+  web.on("/auto", handleAuto);
 
   extern const uint8_t data_tally_html_start[] asm("_binary_data_tally_html_start");
   web.on("/tally", [](){

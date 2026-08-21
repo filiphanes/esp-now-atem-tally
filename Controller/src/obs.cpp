@@ -8,6 +8,13 @@ static const char *TAG = "websocket";
 esp_websocket_client_handle_t client;
 uint64_t DSKbits = 0;
 
+struct ObsPendingSwitch {
+  bool active;
+  bool autoTransition;
+  uint8_t tallyNum;
+};
+ObsPendingSwitch pendingSwitch = {false, false, 0};
+
 inline uint64_t bitn(uint8_t n) {
   return (uint64_t)1 << (n-1);
 }
@@ -51,6 +58,87 @@ void obs_request_current_scenes() {
   esp_websocket_client_send_text(client, op1, strlen(op1), portMAX_DELAY);
   const char* op2 = "{\"op\":6,\"d\":{\"requestType\":\"GetCurrentPreviewScene\",\"requestId\":\"a\",\"requestData\":{}}}";  
   esp_websocket_client_send_text(client, op2, strlen(op2), portMAX_DELAY);
+}
+
+static bool jsonContains(const char* hay, size_t len, const char* needle) {
+  size_t nl = strlen(needle);
+  if (nl == 0 || len < nl) return false;
+  for (size_t i = 0; i + nl <= len; i++) {
+    if (memcmp(hay + i, needle, nl) == 0) return true;
+  }
+  return false;
+}
+
+// GetSceneList responses are large; filter to sceneName so it fits in a small doc.
+void obs_handle_scene_list(const char* json, size_t len) {
+  if (!pendingSwitch.active) return;
+
+  StaticJsonDocument<128> filter;
+  filter["d"]["responseData"]["scenes"][0]["sceneName"] = true;
+
+  DynamicJsonDocument doc(4096);
+  DeserializationError error = deserializeJson(doc, json, len, DeserializationOption::Filter(filter));
+  if (error) {
+    Serial.printf("Scene list parse failed: %s\n", error.c_str());
+    return;
+  }
+
+  uint8_t target = pendingSwitch.tallyNum;
+  bool autoT = pendingSwitch.autoTransition;
+  pendingSwitch.active = false;
+
+  uint64_t targetBit = bitn(target);
+  const char* foundName = nullptr;
+  JsonArray scenes = doc["d"]["responseData"]["scenes"];
+  for (JsonObject scene : scenes) {
+    const char* name = scene["sceneName"];
+    if (name && (bitsFromTags(name) & targetBit)) {
+      foundName = name;
+      break;
+    }
+  }
+  if (!foundName) {
+    Serial.printf("No scene tagged T%u found\n", target);
+    return;
+  }
+
+  Serial.printf("OBS %s -> '%s'\n", autoT ? "auto" : "cut", foundName);
+
+  // Build the request with ArduinoJson so scene names containing quotes,
+  // backslashes or other JSON-significant characters are escaped safely.
+  const char* requestType = autoT ? "SetCurrentPreviewScene" : "SetCurrentProgramScene";
+  StaticJsonDocument<512> req;
+  req["op"] = 6;
+  JsonObject d = req.createNestedObject("d");
+  d["requestType"] = requestType;
+  d["requestId"] = "p";
+  d.createNestedObject("requestData")["sceneName"] = foundName;
+
+  char out[512];
+  size_t outLen = serializeJson(req, out, sizeof(out));
+  if (outLen == 0 || outLen >= sizeof(out)) {
+    Serial.println("OBS switch: scene name too long, request truncated");
+    return;
+  }
+  esp_websocket_client_send_text(client, out, outLen, portMAX_DELAY);
+
+  if (autoT) {
+    const char* trig = "{\"op\":6,\"d\":{\"requestType\":\"TriggerTransition\",\"requestId\":\"t\",\"requestData\":{}}}";
+    esp_websocket_client_send_text(client, trig, strlen(trig), portMAX_DELAY);
+  }
+}
+
+void obs_switch_scene(uint8_t tallyNum, bool autoTransition) {
+  if (!client || !esp_websocket_client_is_connected(client)) {
+    Serial.println("OBS switch: not connected");
+    return;
+  }
+  if (tallyNum == 0) return;
+  pendingSwitch.tallyNum = tallyNum;
+  pendingSwitch.autoTransition = autoTransition;
+  pendingSwitch.active = true;
+  const char* req = "{\"op\":6,\"d\":{\"requestType\":\"GetSceneList\",\"requestId\":\"s\",\"requestData\":{}}}";
+  esp_websocket_client_send_text(client, req, strlen(req), portMAX_DELAY);
 }
 
 void obs_message_handler(StaticJsonDocument<512> doc) {
@@ -119,8 +207,14 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
     // Serial.printf("Received opcode=%d\n", data->op_code);
     if (data->op_code == 1) {
       Serial.printf("<%.*s\n", data->data_len, (char *)data->data_ptr);
+      const char* payload = data->data_ptr + data->payload_offset;
+      size_t payloadLen = data->payload_len;
+      if (jsonContains(payload, payloadLen, "GetSceneList")) {
+        obs_handle_scene_list(payload, payloadLen);
+        return;
+      }
       StaticJsonDocument<512> doc;  // list of scenes is larger than 512 bytes
-      auto error = deserializeJson(doc, data->data_ptr + data->payload_offset, data->payload_len);
+      auto error = deserializeJson(doc, payload, payloadLen);
       if (error) {
         Serial.print(F("deserializeJson() failed with code "));
         Serial.println(error.c_str());
@@ -157,13 +251,19 @@ void obs_setup() {
 }
 
 void obs_loop() {
-  espnow_loop();
-  if (client && !esp_websocket_client_is_connected(client)) {
-    esp_websocket_client_stop(client);
-    esp_websocket_client_destroy(client);
-    client = NULL;
-  }
+
+  // esp_websocket_client has auto-reconnect enabled by default, so we do NOT
+  // destroy the client every loop when it's momentarily disconnected — that
+  // caused a tight create/destroy spin which prevented the WS handshake from
+  // ever completing. We only (re)create the client when it is absent, paced by
+  // a backoff so a down server doesn't reset the connection attempt each
+  // iteration. HTTP config changes restart the device, so config.ip/port never
+  // change at runtime and need no teardown here.
   if (!client && config.ip != 0) {
-    obs_setup();
+    static unsigned long nextRetry = 0;
+    if ((long)(millis() - nextRetry) >= 0) {
+      obs_setup();
+      nextRetry = millis() + 5000;
+    }
   }
 }

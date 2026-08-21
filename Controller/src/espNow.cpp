@@ -18,25 +18,100 @@ uint64_t programBits = 0;
 uint64_t previewBits = 0;
 long lastMessageAt = -10000;
 
+// ---- Generic ESP-NOW burst pump ----
+// Keeps re-sending a small payload every `config.tally_burst_gap` ms for
+// `config.tally_burst_ms` so a dropped packet does not lose a tally update.
+// Receivers are always listening while awake, so the burst is pure redundancy.
+//
+// Explicit receiver sleep: once a burst drains we send SLEEP(sleep_ms) and then
+// stay silent for sleep_ms, letting receivers power down their radio. A new
+// tally change that arrives during that window is latched (tally_dirty) and
+// flushed as soon as the receivers wake. sleep_ms == 0 keeps receivers awake.
+// Idle-set keepalive cadence. Receivers blank their broadcast tally and show
+// a moving red "no signal" pixel after 5 s of silence (Receiver/main.c), so the
+// controller MUST keep re-bursting the current tally even when the switcher is
+// quiet. The natural cadence is sleep_ms + tally_burst_ms (the burst/sleep
+// cycle the controller already drives); that keeps power-save intact while
+// staying well under the 5 s receiver timeout. We clamp it so sleep_ms == 0
+// (always-on receivers) does not spam packets every loop tick, and so a very
+// large sleep_ms still fires shortly after the receivers wake.
+#define RX_NO_SIGNAL_MS   5000UL   // receiver blanks after this much silence
+#define KEEPALIVE_MIN_MS   1000UL   // floor: no more than ~1 burst/sec when idle
+#define KEEPALIVE_MAX_MS   4000UL   // ceiling: leaves >=1s margin under RX timeout
+static inline unsigned long keepalive_window_ms() {
+  unsigned long cycle = (unsigned long)config.sleep_ms + config.tally_burst_ms;
+  if (cycle > KEEPALIVE_MAX_MS) cycle = KEEPALIVE_MAX_MS;
+  if (cycle < KEEPALIVE_MIN_MS) cycle = KEEPALIVE_MIN_MS;
+  return cycle;
+}
+static unsigned long burst_until = 0;   // 0 == idle
+static unsigned long burst_next  = 0;
+static uint8_t  burst_payload[16];
+static uint8_t  burst_len = 0;
+static unsigned long sleep_until = 0;   // receivers sleep until this millis(); no new sends before it
+static bool tally_dirty = false;       // a tally change is pending a burst
+static bool burst_active_prev = false; // edge detection: burst just drained
+
+static void startBurst(const uint8_t *payload, uint8_t len, uint32_t duration_ms) {
+  if (len > sizeof(burst_payload)) len = sizeof(burst_payload);
+  memcpy(burst_payload, payload, len);
+  burst_len   = len;
+  burst_until = millis() + duration_ms;
+  // Fire the first packet immediately (latency for already-awake receivers).
+  esp_err_t r = esp_now_send(broadcast_mac, burst_payload, burst_len);
+  if (r != ESP_OK) Serial.println("esp_now_send != OK");
+  burst_next = millis() + config.tally_burst_gap;   // schedule the rest
+}
+
+// One non-blocking tick. Call from the main loop. Sends 0..1 packets.
+static bool espnow_burst_tick() {
+  if (burst_len == 0) return false;
+  if ((long)(millis() - burst_until) >= 0) { burst_len = 0; return false; } // done
+  if ((long)(millis() - burst_next)  <  0) return true;                    // not yet
+  burst_next += config.tally_burst_gap;
+  if ((long)(millis() - burst_next) > 0) burst_next = millis();            // catch up
+  esp_err_t r = esp_now_send(broadcast_mac, burst_payload, burst_len);
+  if (r != ESP_OK) Serial.println("esp_now_send != OK");
+  return true;
+}
+
 espnow_tally_info_t * espnow_tallies() {
   return tallies;
 }
+
+static void espnow_flush_tally();  // forward decl: espnow_tally flushes on change
 
 void espnow_tally() {
   espnow_tally(&programBits, &previewBits);
 }
 
+// Called on every tally change (ATEM callback / OBS event / vMix tally line)
+// and on the periodic refresh. Fires downstream side effects ONCE per call,
+// then arms a SET_TALLY burst so a dropped packet does not stick. A NULL
+// pointer means "leave that bitfield unchanged" (used by the /program and
+// /preview OSC endpoints).
 void espnow_tally(uint64_t *program, uint64_t *preview) {
-  uint8_t payload[1+sizeof(uint64_t)+sizeof(uint64_t)];
-  payload[0] = SET_TALLY;
-  memcpy(payload+1, program, sizeof(uint64_t));
-  memcpy(payload+1+sizeof(uint64_t), preview, sizeof(uint64_t));
-  esp_err_t result = esp_now_send(broadcast_mac, payload, sizeof(payload));
-  programBits = *program;
-  previewBits = *preview;
-  if (result != ESP_OK) Serial.println("esp_now_send != OK");
-  vmix_tally(program, preview);
+  if (program) programBits = *program;
+  if (preview) previewBits = *preview;
+  vmix_tally(&programBits, &previewBits);
   ws_tally();
+  tally_dirty = true;
+  espnow_flush_tally();
+}
+
+// Start a SET_TALLY burst now, unless the receivers are sleeping (then the
+// change stays latched in tally_dirty and is flushed when they wake) or a
+// burst is already running (startBurst then refreshes its payload/time).
+static void espnow_flush_tally() {
+  if (!tally_dirty) return;
+  if ((long)(millis() - sleep_until) < 0) return;   // receivers sleeping: defer
+  tally_dirty = false;
+  lastMessageAt = millis();
+  uint8_t payload[1 + sizeof(uint64_t) + sizeof(uint64_t)];
+  payload[0] = SET_TALLY;
+  memcpy(payload + 1, &programBits, sizeof(uint64_t));
+  memcpy(payload + 1 + sizeof(uint64_t), &previewBits, sizeof(uint64_t));
+  startBurst(payload, sizeof(payload), config.tally_burst_ms);
 }
 
 void switchCamId(uint8_t id1, uint8_t id2) {
@@ -163,10 +238,41 @@ void espnow_setup()
   }
 }
 
+// Tell every receiver it may power down its radio for `ms`. Sent once, right
+// after a burst drains, when the receivers are awake and listening. The caller
+// must then stay silent for `ms` so the sleep is real (see sleep_until).
+void espnow_sleep_all(uint16_t ms) {
+  uint8_t payload[3];
+  payload[0] = SLEEP;
+  payload[1] = ms & 0xFF;
+  payload[2] = (ms >> 8) & 0xFF;
+  esp_err_t r = esp_now_send(broadcast_mac, payload, sizeof(payload));
+  if (r != ESP_OK) Serial.println("esp_now_send != OK");
+}
+
 void espnow_loop() {
-  if (millis() - lastMessageAt > TALLY_UPDATE_EACH) {
-    espnow_tally();
-    lastMessageAt = millis();
+  // Drive any in-flight burst first (one packet per ~tally_burst_gap tick).
+  bool active = espnow_burst_tick();
+  // Edge: a burst just drained -> tell receivers they may sleep, and hold off
+  // our own sends until they wake.
+  if (burst_active_prev && !active && config.sleep_ms > 0) {
+    espnow_sleep_all(config.sleep_ms);
+    sleep_until = millis() + config.sleep_ms;
+  }
+  burst_active_prev = active;
+  if (active) return;
+  // Receivers may be sleeping: do not start anything new until they wake.
+  if ((long)(millis() - sleep_until) < 0) return;
+  // Awake window: flush a tally change that arrived during sleep.
+  espnow_flush_tally();
+  if (burst_len != 0) return;                  // flush armed a burst
+  // Keepalive: re-burst the current tally on a cadence safely below the
+  // receiver's 5 s no-signal timeout so receivers stay lit and resync even
+  // when the switcher never changes. Without this the strip blanks within
+  // a few seconds of idle.
+  if (millis() - lastMessageAt > keepalive_window_ms()) {
+    tally_dirty = true;
+    espnow_flush_tally();
   }
 }
 

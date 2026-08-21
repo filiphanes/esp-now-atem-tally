@@ -32,10 +32,25 @@ void atem_setup() {
   AtemSwitcher.setAtemTallyCallback(espnow_tally);
 }
 
+void atem_switch_scene(uint8_t tallyNum, bool autoTransition) {
+  if (tallyNum == 0) return;
+  if (!AtemSwitcher.isConnected()) {
+    Serial.println("ATEM switch: not connected");
+    return;
+  }
+  if (autoTransition) {
+    Serial.printf("ATEM auto -> %u\n", tallyNum);
+    AtemSwitcher.changePreviewInput(tallyNum);
+    AtemSwitcher.doAuto(0);
+  } else {
+    Serial.printf("ATEM cut -> %u\n", tallyNum);
+    AtemSwitcher.changeProgramInput(tallyNum);
+  }
+}
+
 void atem_loop() {
   AtemSwitcher.runLoop();
   if (AtemSwitcher.isConnected()) {
-    espnow_loop();
     lastAtemIsConnected = true;
   } else if (lastAtemIsConnected) {
     lastAtemIsConnected = false;
