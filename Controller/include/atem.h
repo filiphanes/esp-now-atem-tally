@@ -1,16 +1,13 @@
 #pragma once
-#include <ATEMbase.h>
-#include <ATEMstd.h>
+#include <Arduino.h>
 #include "main.h"
 
-// maximum number of ATEM inputs
-// because ATEM Arduino Library uses a 64 element array
-// for atemTallyByIndexTallyFlags
+// maximum number of ATEM inputs tracked (one TlIn tally packet carries up to
+// 64 per-input flag bytes)
 #define TALLY_COUNT 64
 #define TALLY_UPDATE_EACH 2000
 
-extern ATEMstd AtemSwitcher;
-
+bool atem_isConnected();
 uint64_t getProgramBits();
 uint64_t getPreviewBits();
 void atem_setup();
