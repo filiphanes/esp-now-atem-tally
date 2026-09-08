@@ -257,13 +257,13 @@ void readCamId() {
 }
 
 void readCamGroup() {
-  esp_err_t err = nvs_get_u8(nvs_tally_handle, "camGroup", &camId);
+  esp_err_t err = nvs_get_u8(nvs_tally_handle, "camGroup", &camGroup);
   switch (err) {
       case ESP_OK:
           break;
       case ESP_ERR_NVS_NOT_FOUND:
-          camId = DEFAULT_CAMGROUP;
-          err = nvs_set_u8(nvs_tally_handle, "camGroup", camId);
+          camGroup = DEFAULT_CAMGROUP;
+          err = nvs_set_u8(nvs_tally_handle, "camGroup", camGroup);
           if (err == ESP_OK) {
             printf("Default camGroup saved.\n");
             err = nvs_commit(nvs_tally_handle);
@@ -732,8 +732,128 @@ inline bool getBit(uint64_t bits, int i) {
   return bits & ((uint64_t)1 << i);
 }
 
-// Callback function that will be executed when data is received
+// ---- RX work latching ----
+// The ESP-NOW receive callback runs in the WiFi task: it must not block or
+// drive peripherals (RMT, NVS, delay). It only latches the newest command
+// here; app_main picks it up and renders. Last-write-wins is correct for
+// tally traffic: an intermediate frame we skip is superseded by the next
+// burst packet ~20 ms later anyway.
+typedef struct {
+  uint8_t cmd;
+  uint8_t a, b, c;   // color bytes / brightness / signal number / cam id
+  uint64_t bits;     // target bitmask
+  uint64_t pvwBits;  // SET_TALLY preview bitmask
+} rx_work_t;
+
+static portMUX_TYPE rx_work_mux = portMUX_INITIALIZER_UNLOCKED;
+static rx_work_t rx_work;
+static volatile bool rx_work_pending = false;
+
+static void latch_rx_work(uint8_t cmd, uint8_t a, uint8_t b, uint8_t c,
+                          uint64_t bits, uint64_t pvwBits) {
+  portENTER_CRITICAL(&rx_work_mux);
+  rx_work.cmd = cmd;
+  rx_work.a = a; rx_work.b = b; rx_work.c = c;
+  rx_work.bits = bits;
+  rx_work.pvwBits = pvwBits;
+  rx_work_pending = true;
+  portEXIT_CRITICAL(&rx_work_mux);
+}
+
+// Move the latched work out under a critical section (64-bit fields are not
+// atomic and the callback can preempt app_main mid-copy).
+static bool take_rx_work(rx_work_t *out) {
+  if (!rx_work_pending) return false;
+  portENTER_CRITICAL(&rx_work_mux);
+  *out = rx_work;
+  rx_work_pending = false;
+  portEXIT_CRITICAL(&rx_work_mux);
+  return true;
+}
+
+// Execute one latched command in app_main context. May block/render freely.
+static void handle_rx_work(const rx_work_t *w) {
+  switch (w->cmd) {
+
+  case SET_TALLY:
+    // Yellow for program+preview, red for program, green for preview, grey idle
+    if (!getBit(w->bits, camId - 1) && !getBit(w->pvwBits, camId - 1)) {
+      fillColorDirect(BACKGROUND_COLOR);
+    } else {
+      fillColor(255 * getBit(w->bits, camId - 1),
+                255 * getBit(w->pvwBits, camId - 1),
+                0);
+    }
+    break;
+
+  case SET_COLOR:
+    ESP_LOGI(TAG, "SET_COLOR #%02x%02x%02x", w->a, w->b, w->c);
+    if (getBit(w->bits, camId - 1)) fillColor(w->a, w->b, w->c);
+    break;
+
+  case SHOW_SIGNAL:
+    if (getBit(w->bits, camId - 1)) displaySignal(w->a);
+    break;
+
+  case SIGNAL_CHANGE:
+  case SIGNAL_FOCUS:
+  case SIGNAL_DEFOCUS:
+  case SIGNAL_ZOOMIN:
+  case SIGNAL_ZOOMOUT:
+  case SIGNAL_LEFT:
+  case SIGNAL_DOWN:
+  case SIGNAL_UP:
+  case SIGNAL_RIGHT:
+  case SIGNAL_ISOUP:
+  case SIGNAL_ISODOWN:
+  case SIGNAL_OK:
+    ESP_LOGI(TAG, "SIGNAL %u", w->cmd);
+    if (getBit(w->bits, camId - 1)) displaySignal(w->cmd);
+    break;
+
+  case SET_BRIGHTNESS:
+    if (getBit(w->bits, camId - 1)) setBrightness(w->a);
+    break;
+
+  case SET_CAMID:
+    if (getBit(w->bits, camId - 1)) {
+      camId = w->a;
+      writeCamId();
+      nvs_commit(nvs_tally_handle);  // make sure it survives power loss
+      displayNumber(0, 0, 255, camId);
+      ESP_LOGI(TAG, "SET_CAMID %d", camId);
+      delay(1000);  // keep the new number visible briefly
+    }
+    break;
+
+  case SET_CAMGROUP:
+    if (getBit(w->bits, camId - 1)) {
+      camGroup = w->a;
+      writeCamGroup();
+      nvs_commit(nvs_tally_handle);
+      displayNumber(0, 255, 0, camGroup);
+      ESP_LOGI(TAG, "SET_CAMGROUP %d", camGroup);
+      delay(1000);
+    }
+    break;
+
+  case SWITCH_CAMID:
+    ESP_LOGI(TAG, "SWITCH_CAMID %u<>%u", w->a, w->b);
+    if (camId == w->a) {
+      camId = w->b;
+      writeCamId();
+    } else if (camId == w->b) {
+      camId = w->a;
+      writeCamId();
+    }
+    break;
+  }
+}
+
+// Callback function that will be executed when data is received.
+// Runs in the WiFi task: latch only, never block or render.
 static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
+  if (len < 1) return;
   espnow_command command = (espnow_command)data[0];
 #ifdef DEBUG
   ESP_LOGI(TAG, "<[%d] ", command);
@@ -741,57 +861,39 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
   switch (command) {
 
   case SET_TALLY: {
-    uint64_t *program_p = (uint64_t *)(data+1);
-    uint64_t *preview_p = (uint64_t *)(data+1+sizeof(uint64_t));
-    // uint8_t  *group_p   = (uint8_t *) (data+1+sizeof(uint64_t)+sizeof(uint64_t));
-    // if (group_p <= data+len && *group_p != camGroup) return;
-    // Show yellow for program+preview, red for program, green for preview, grey for idle
-    bool isProgram = getBit(*program_p, camId-1);
-    bool isPreview = getBit(*preview_p, camId-1);
-    
-    if (!isProgram && !isPreview) {
-      fillColorDirect(BACKGROUND_COLOR);
-    } else {
-      fillColor(
-        255*getBit(*program_p, camId-1),
-        255*getBit(*preview_p, camId-1),
-        0
-      );
-    }
+    if (len < 1 + 16) break;  // need both bitmasks
+    uint64_t pgm, pvw;
+    memcpy(&pgm, data + 1, sizeof(pgm));            // memcpy: data is unaligned
+    memcpy(&pvw, data + 1 + sizeof(uint64_t), sizeof(pvw));
+    latch_rx_work(SET_TALLY, 0, 0, 0, pgm, pvw);
     lastMessageReceived = millis();
 #ifdef DEBUG
-    ESP_LOGI(TAG, "SET_TALLY");
-    // for (int i=1; i<len; i++) ESP_LOGI(TAG, "%02x ", data[i]);
-    // ESP_LOGI(TAG, );
     printf("Program ");
-    for (int i=0; i<TALLY_COUNT; i++) printf("%d", getBit(*program_p, i)?1:0);
-    printf("\n");
-    printf("Preview ");
-    for (int i=0; i<TALLY_COUNT; i++) printf("%d", getBit(*preview_p, i)?1:0);
+    for (int i = 0; i < TALLY_COUNT; i++) printf("%d", getBit(pgm, i) ? 1 : 0);
+    printf("\nPreview ");
+    for (int i = 0; i < TALLY_COUNT; i++) printf("%d", getBit(pvw, i) ? 1 : 0);
     printf("\n");
 #endif
     break;
   }
-    
+
   case HEARTBEAT:
     break;
 
   case SET_COLOR: {
-    uint64_t *bits_p = (uint64_t *)(data+4);
-    ESP_LOGI(TAG, "SET_COLOR #%02x%02x%02x\n", data[2], data[3], data[4]);
-    if (getBit(*bits_p, camId-1)) {
-      fillColor(data[1], data[2], data[3]);
-    }
+    if (len < 4 + 8) break;
+    uint64_t bits;
+    memcpy(&bits, data + 4, sizeof(bits));
+    latch_rx_work(SET_COLOR, data[1], data[2], data[3], bits, 0);
     lastMessageReceived = millis();
     break;
   }
-  
+
   case SHOW_SIGNAL: {
-    uint64_t *bits_p = (uint64_t *)(data+2);
-    uint8_t signal = data[1];
-    if (getBit(*bits_p, camId-1)) {
-      displaySignal(signal);
-    }
+    if (len < 2 + 8) break;
+    uint64_t bits;
+    memcpy(&bits, data + 2, sizeof(bits));
+    latch_rx_work(SHOW_SIGNAL, data[1], 0, 0, bits, 0);
     lastMessageReceived = millis();
     break;
   }
@@ -808,27 +910,26 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
   case SIGNAL_ISOUP:
   case SIGNAL_ISODOWN:
   case SIGNAL_OK: {
-    uint64_t *bits_p = (uint64_t *)(data+1);
-    ESP_LOGI(TAG, "SIGNAL %u %llu\n", command, *bits_p);
-    if (getBit(*bits_p, camId-1)) displaySignal(command);
+    if (len < 1 + 8) break;
+    uint64_t bits;
+    memcpy(&bits, data + 1, sizeof(bits));
+    latch_rx_work(command, 0, 0, 0, bits, 0);
     lastMessageReceived = millis();
     break;
   }
 
   case SET_BRIGHTNESS: {
-    uint64_t *bits_p = (uint64_t *)(data+2);
-    uint64_t brightness = data[1];
-    if (getBit(*bits_p, camId-1)) {
-      setBrightness(brightness);
-    }
+    if (len < 2 + 8) break;
+    uint64_t bits;
+    memcpy(&bits, data + 2, sizeof(bits));
+    latch_rx_work(SET_BRIGHTNESS, data[1], 0, 0, bits, 0);
     lastMessageReceived = millis();
     break;
   }
 
   case SLEEP: {
     // [cmd][dur_lo][dur_hi]: the Controller says we may sleep `dur` ms.
-    // This callback runs in the WiFi task, so only latch the request here;
-    // app_main performs the actual sleep.
+    // Only latched here; app_main performs the actual sleep.
     if (len >= 3) {
       sleep_request_ms = data[1] | (data[2] << 8);
     }
@@ -837,58 +938,26 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
   }
 
   case SET_CAMID: {
-    uint64_t *bits_p = (uint64_t *)(data+2);
-    if (getBit(*bits_p, camId-1)) {
-      camId = data[1];
-      writeCamId();
-      displayNumber(0, 0, 255, camId);
-      ESP_LOGI(TAG, "SET_CAMID %d\n", camId);
-      delay(1000);  // so new number is visible
-    }
-    /*
-    uint8_t mac[6];
-    esp_wifi_get_mac(WIFI_IF_STA, mac);
-    if (memcmp(mac, (uint8_t*) (data + sizeof(espnow_command)), 6) == 0) {
-      camId = data[7];
-      ESP_LOGI(TAG, "SET_CAMID %d\n", camId);
-    }
-    */
+    if (len < 2 + 8) break;
+    uint64_t bits;
+    memcpy(&bits, data + 2, sizeof(bits));
+    latch_rx_work(SET_CAMID, data[1], 0, 0, bits, 0);
     lastMessageReceived = millis();
     break;
   }
 
   case SET_CAMGROUP: {
-    uint64_t *bits_p = (uint64_t *)(data+2);
-    if (getBit(*bits_p, camId-1)) {
-      camGroup = data[1];
-      writeCamGroup();
-      displayNumber(0, 255, 0, camGroup);
-      ESP_LOGI(TAG, "SET_CAMGRUOP %d\n", camGroup);
-      delay(1000);  // so new number is visible
-    }
-    /*
-    uint8_t mac[6];
-    esp_wifi_get_mac(WIFI_IF_STA, mac);
-    if (memcmp(mac, (uint8_t*) (data + sizeof(espnow_command)), 6) == 0) {
-      camId = data[7];
-      ESP_LOGI(TAG, "SET_CAMID %d\n", camId);
-    }
-    */
+    if (len < 2 + 8) break;
+    uint64_t bits;
+    memcpy(&bits, data + 2, sizeof(bits));
+    latch_rx_work(SET_CAMGROUP, data[1], 0, 0, bits, 0);
     lastMessageReceived = millis();
     break;
   }
 
   case SWITCH_CAMID: {
-    uint8_t* id1 = (uint8_t*) (data + sizeof(espnow_command));
-    uint8_t* id2 = (uint8_t*) (data + sizeof(espnow_command) + sizeof(uint8_t));
-    ESP_LOGI(TAG, "SWITCH_CAMID %u<>%u", *id1, *id2);
-    if (camId == *id1) {
-      camId = *id2;
-      writeCamId();
-    } else if (camId == *id2) {
-      camId = *id1;
-      writeCamId();
-    }
+    if (len < 3) break;
+    latch_rx_work(SWITCH_CAMID, data[1], data[2], 0, 0, 0);
     lastMessageReceived = millis();
     break;
   }
@@ -983,10 +1052,11 @@ void app_main() {
   ESP_LOGI(TAG, "esp_now_init");
   ESP_ERROR_CHECK( esp_now_init() );
   
-  // Add Broadcast Peer
-  esp_now_peer_info_t peer;
+  // Add Broadcast Peer. Zero-init first: stack garbage in ifidx/channel
+  // makes esp_now_add_peer fail or bind the wrong interface.
+  esp_now_peer_info_t peer = {0};
   peer.channel = 0;
-  // peer.ifidx = WIFI_IF_STA;
+  peer.ifidx = WIFI_IF_STA;
   peer.encrypt = false;
   // memcpy(&peer.lmk, CONFIG_ESPNOW_LMK, ESP_NOW_KEY_LEN);
   memcpy(peer.peer_addr, broadcast_mac, ESP_NOW_ETH_ALEN);
@@ -1005,6 +1075,12 @@ void app_main() {
     // On-board button: cycle camId 1..10 and persist to NVS.
     if (button_pressed()) {
       cycle_camid();
+    }
+    // Execute latched ESP-NOW work here in app_main context: rendering and
+    // NVS writes must not happen in the WiFi-task receive callback.
+    rx_work_t w;
+    if (take_rx_work(&w)) {
+      handle_rx_work(&w);
     }
     // Explicit sleep: the Controller sent SLEEP(ms). app_main is the only place
     // we may block, so consume the request here (the recv cb just latches it).

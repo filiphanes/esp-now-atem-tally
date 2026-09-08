@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 #include <Preferences.h>
 #include <mdns.h>
 
@@ -131,6 +132,11 @@ void setup() {
   Serial.begin(115200);
   while (!Serial) delay(5);
 
+  // Watchdog the loop task: a hung module (protocol parser, TCP stall,
+  // webserver...) reboots the controller instead of silently dropping all
+  // tally. Fed from loop() below.
+  enableLoopWDT();
+
   setupWebserver();
   vmixServerSetup();
   osc_setup();
@@ -163,4 +169,5 @@ void loop() {
   vmixServerLoop();
   webserverLoop();
   delay(20);       // 20ms tick == default burst gap
+  esp_task_wdt_reset();   // feed the loop watchdog
 }
