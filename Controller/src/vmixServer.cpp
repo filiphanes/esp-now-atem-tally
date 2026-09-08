@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFiServer.h>
+#include <WiFiClient.h>
 #include <vector>
 #include "espnow.h"
 

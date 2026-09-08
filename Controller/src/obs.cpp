@@ -5,8 +5,25 @@
 #define MULTILINE(...) #__VA_ARGS__
 
 static const char *TAG = "websocket";
-esp_websocket_client_handle_t client;
 uint64_t DSKbits = 0;
+
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+// Arduino core 3.x (pioarduino, IDF 5.x) no longer ships the IDF
+// esp_websocket_client component with the framework's prebuilt libraries,
+// so the OBS connection uses the WebSockets library client -- the same
+// Links2004/WebSockets dependency that already serves the tally UI socket.
+WebSocketsClient wsClient;
+static bool obs_ws_connected = false;
+static bool obs_ws_begun = false;
+// QWebSocket (OBS 30) fragments large text messages into continuation
+// frames; reassemble them here before JSON parsing. Whole messages arrive
+// as a single WStype_TEXT event.
+static String wsTextMsg;
+static bool wsTextTooBig = false;
+static const size_t WS_TEXT_MAX = 64 * 1024;
+#else
+esp_websocket_client_handle_t client;
+#endif
 
 struct ObsPendingSwitch {
   bool active;
@@ -43,21 +60,43 @@ uint64_t bitsFromTags(const char* s) {
   return bits;
 }
 
+// Send one text frame to the OBS server. On core 2 the IDF client takes an
+// explicit bounded timeout so a stalled OBS cannot freeze the main loop
+// forever; on core 3 the WebSockets library client has no timeout parameter,
+// but it queues internally and only ever blocks on the TCP socket itself.
+static void obs_send_text(const char *buf, size_t len, TickType_t timeout = portMAX_DELAY) {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  (void)timeout;
+  wsClient.sendTXT(buf, len);
+#else
+  esp_websocket_client_send_text(client, buf, len, timeout);
+#endif
+}
+
 void obs_broadcast_signal(uint64_t bits, uint8_t signal) {
-  char op[150] = "";
-  for (int i=0; i < 64; i++) {
+  for (int i = 0; i < 64; i++) {
     if (bits & bitn(i)) {
-      sprintf(op, MULTILINE({"op":6,"d":{"requestType":"BroadcastCustomEvent","requestId":"b","requestData":{"eventData":{"type":"tally","from":0,"to":%d,"signal":%u}}}}), i, signal);  
-      esp_websocket_client_send_text(client, op, strlen(op), portMAX_DELAY);
+      char op[192];
+      int n = snprintf(op, sizeof(op),
+        "{\"op\":6,\"d\":{\"requestType\":\"BroadcastCustomEvent\",\"requestId\":\"b\","
+        "\"requestData\":{\"eventData\":{\"type\":\"tally\",\"from\":0,\"to\":%d,\"signal\":%u}}}}",
+        i, signal);
+      if (n > 0 && n < (int)sizeof(op)) {
+        // Bounded timeout: a stalled OBS must not freeze the main loop
+        // forever; the websocket client buffers and reconnects on its own.
+        obs_send_text(op, n, pdMS_TO_TICKS(250));
+      } else {
+        Serial.printf("OBS: signal json truncated (%d)\n", n);
+      }
     }
   }
 }
 
 void obs_request_current_scenes() {
   const char* op1 = "{\"op\":6,\"d\":{\"requestType\":\"GetCurrentProgramScene\",\"requestId\":\"a\",\"requestData\":{}}}";
-  esp_websocket_client_send_text(client, op1, strlen(op1), portMAX_DELAY);
-  const char* op2 = "{\"op\":6,\"d\":{\"requestType\":\"GetCurrentPreviewScene\",\"requestId\":\"a\",\"requestData\":{}}}";  
-  esp_websocket_client_send_text(client, op2, strlen(op2), portMAX_DELAY);
+  obs_send_text(op1, strlen(op1));
+  const char* op2 = "{\"op\":6,\"d\":{\"requestType\":\"GetCurrentPreviewScene\",\"requestId\":\"a\",\"requestData\":{}}}";
+  obs_send_text(op2, strlen(op2));
 }
 
 static bool jsonContains(const char* hay, size_t len, const char* needle) {
@@ -120,25 +159,32 @@ void obs_handle_scene_list(const char* json, size_t len) {
     Serial.println("OBS switch: scene name too long, request truncated");
     return;
   }
-  esp_websocket_client_send_text(client, out, outLen, portMAX_DELAY);
+  obs_send_text(out, outLen);
 
   if (autoT) {
     const char* trig = "{\"op\":6,\"d\":{\"requestType\":\"TriggerTransition\",\"requestId\":\"t\",\"requestData\":{}}}";
-    esp_websocket_client_send_text(client, trig, strlen(trig), portMAX_DELAY);
+    obs_send_text(trig, strlen(trig));
   }
 }
 
 void obs_switch_scene(uint8_t tallyNum, bool autoTransition) {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  if (!obs_ws_connected) {
+    Serial.println("OBS switch: not connected");
+    return;
+  }
+#else
   if (!client || !esp_websocket_client_is_connected(client)) {
     Serial.println("OBS switch: not connected");
     return;
   }
+#endif
   if (tallyNum == 0) return;
   pendingSwitch.tallyNum = tallyNum;
   pendingSwitch.autoTransition = autoTransition;
   pendingSwitch.active = true;
   const char* req = "{\"op\":6,\"d\":{\"requestType\":\"GetSceneList\",\"requestId\":\"s\",\"requestData\":{}}}";
-  esp_websocket_client_send_text(client, req, strlen(req), portMAX_DELAY);
+  obs_send_text(req, strlen(req));
 }
 
 void obs_message_handler(StaticJsonDocument<512> doc) {
@@ -193,11 +239,73 @@ void obs_message_handler(StaticJsonDocument<512> doc) {
     // InputActiveStateChanged=131072 == program
     // =393216
     const char* op1 = "{\"op\":1,\"d\":{\"rpcVersion\":1,\"eventSubscriptions\":532}}";
-    esp_websocket_client_send_text(client, op1, strlen(op1), portMAX_DELAY);
+    obs_send_text(op1, strlen(op1));
     break;
     }
   }
 }
+
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+
+// One complete text message from the OBS server.
+static void obs_handle_ws_text(const char* payload, size_t len) {
+  if (jsonContains(payload, len, "GetSceneList")) {
+    obs_handle_scene_list(payload, len);
+    return;
+  }
+  StaticJsonDocument<512> doc;  // list of scenes is larger than 512 bytes
+  auto error = deserializeJson(doc, payload, len);
+  if (error) {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return;
+  }
+  obs_message_handler(doc);
+}
+
+static void obs_ws_event(WStype_t type, uint8_t *payload, size_t length) {
+  switch (type) {
+  case WStype_CONNECTED:
+    Serial.println("WS CONNECTED");
+    obs_ws_connected = true;
+    wsTextMsg = "";
+    wsTextTooBig = false;
+    break;
+  case WStype_DISCONNECTED:
+    Serial.println("WS DISCONNECTED");
+    obs_ws_connected = false;
+    break;
+  case WStype_TEXT:
+    obs_handle_ws_text((const char*)payload, length);
+    break;
+  case WStype_FRAGMENT_TEXT_START:
+    wsTextMsg = "";
+    wsTextTooBig = false;
+    // fall through: a fragment start is also accumulated like a middle part
+  case WStype_FRAGMENT:
+    if (wsTextTooBig) break;
+    if (wsTextMsg.length() + length > WS_TEXT_MAX
+        || !wsTextMsg.concat((const char*)payload, length)) {
+      wsTextTooBig = true;
+      wsTextMsg = "";
+      Serial.println("OBS: websocket message too large, dropped");
+    }
+    break;
+  case WStype_FRAGMENT_FIN:
+    if (!wsTextTooBig) {
+      obs_handle_ws_text(wsTextMsg.c_str(), wsTextMsg.length());
+    }
+    wsTextMsg = "";
+    break;
+  case WStype_ERROR:
+    Serial.println("WS ERROR");
+    break;
+  default:
+    break;
+  }
+}
+
+#else
 
 static void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -238,20 +346,41 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
   }
 }
 
+#endif
+
 void obs_setup() {
+  Serial.printf("obs_setup %s:%d\n", config.ip.toString().c_str(), config.port);
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  obs_ws_begun = true;
+  wsClient.begin(config.ip, config.port, "/");
+  // The library retries the connection on this interval, replacing the old
+  // client-recreate backoff below (HTTP config changes restart the device,
+  // so ip/port never change at runtime).
+  wsClient.setReconnectInterval(5000);
+  wsClient.onEvent(obs_ws_event);
+#else
   char uri[64];
   sprintf(uri, "ws://%s:%d", config.ip.toString().c_str(), config.port);
-  Serial.printf("obs_setup %s\n", uri);
   const esp_websocket_client_config_t ws_cfg = {
     .uri = uri,
   };
   client = esp_websocket_client_init(&ws_cfg);
   esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);
   esp_websocket_client_start(client);
+#endif
 }
 
 void obs_loop() {
 
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  // WebSocketsClient owns reconnection once begun (setReconnectInterval), so
+  // there is no create/destroy cycle; if the boot config had no IP yet
+  // (fresh flash, empty NVS), begin() is deferred until a config exists.
+  if (!obs_ws_begun && config.ip != 0) {
+    obs_setup();
+  }
+  wsClient.loop();
+#else
   // esp_websocket_client has auto-reconnect enabled by default, so we do NOT
   // destroy the client every loop when it's momentarily disconnected — that
   // caused a tight create/destroy spin which prevented the WS handshake from
@@ -266,4 +395,5 @@ void obs_loop() {
       nextRetry = millis() + 5000;
     }
   }
+#endif
 }

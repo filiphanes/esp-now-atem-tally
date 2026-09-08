@@ -160,22 +160,49 @@ void espnow_signal(uint8_t signal, uint64_t *bits) {
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
-// callback when data is sent
+// callback when data is sent (WiFi task context: only touch cheap flags).
+// Broadcast has no MAC-level ack, so failures are rare (queue exhaustion,
+// radio contention) -- but a rising streak means receivers are missing our
+// packets, and we force a resync burst instead of waiting for the keepalive.
+#define SEND_FAIL_RESYNC_STREAK 3
+static volatile uint8_t sendFailStreak = 0;
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+// IDF 5.5 hands the send callback a wifi_tx_info_t instead of the peer MAC;
+// only the status is used below.
+void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status)
+{
+  (void)tx_info;
+#else
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 {
-  // Serial.print("\r\nLast Packet Send Status:\t");
-  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  (void)mac_addr;
+#endif
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    sendFailStreak = 0;
+  } else if (sendFailStreak < 255) {
+    sendFailStreak = (uint8_t)(sendFailStreak + 1);   // volatile ++ is deprecated
+  }
 }
 
 // callback when data is received
+#if ESP_IDF_VERSION_MAJOR >= 5
+// IDF 5.x hands the callback an esp_now_recv_info_t that carries the sender
+// MAC, so unwrap it to keep the body below unchanged.
+void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
+{
+  const uint8_t *mac_addr = info->src_addr;
+#else
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
 {
+#endif
   espnow_command command = (espnow_command) data[0];
   // Serial.printf("Command[%d]: ", len);
   switch (command)
   {
   case HEARTBEAT: {
-    Serial.printf("HEARTBEAT %d\n", data[8]);
+    if (len < 2) break;   // payload is [cmd][camId]
+    Serial.printf("HEARTBEAT %d\n", data[1]);
     for (int i=0; i<MAX_TALLY_COUNT; i++) {
       if (memcmp(tallies[i].mac_addr, mac_addr, 6) == 0) {
         // Found
@@ -224,6 +251,7 @@ void espnow_setup()
   // Register peer
   memcpy(peerInfo.peer_addr, broadcast_mac, 6);
   peerInfo.channel = 0;
+  peerInfo.ifidx = WIFI_IF_STA;   // be explicit: default would be STA anyway
   peerInfo.encrypt = false;
 
   // Add peer
@@ -250,7 +278,22 @@ void espnow_sleep_all(uint16_t ms) {
   if (r != ESP_OK) Serial.println("esp_now_send != OK");
 }
 
+// Forget receivers we have not heard from in a while so the find-or-add scan
+// in OnDataRecv and any UI listing tallies[] don't accumulate ghosts.
+#define TALLY_STALE_MS 60000UL
+
+static void prune_stale_tallies() {
+  unsigned long now = millis();
+  for (int i = 0; i < MAX_TALLY_COUNT; i++) {
+    if (tallies[i].id != 0 && now - tallies[i].last_seen > TALLY_STALE_MS) {
+      tallies[i].id = 0;
+      memset(tallies[i].mac_addr, 0, sizeof(tallies[i].mac_addr));
+    }
+  }
+}
+
 void espnow_loop() {
+  prune_stale_tallies();
   // Drive any in-flight burst first (one packet per ~tally_burst_gap tick).
   bool active = espnow_burst_tick();
   // Edge: a burst just drained -> tell receivers they may sleep, and hold off
@@ -265,6 +308,14 @@ void espnow_loop() {
   if ((long)(millis() - sleep_until) < 0) return;
   // Awake window: flush a tally change that arrived during sleep.
   espnow_flush_tally();
+  // Delivery failures piling up -> force a resync burst right away instead of
+  // waiting for the periodic keepalive window.
+  if (sendFailStreak >= SEND_FAIL_RESYNC_STREAK) {
+    sendFailStreak = 0;
+    Serial.println("espnow: send failures, forcing resync burst");
+    tally_dirty = true;
+    espnow_flush_tally();
+  }
   if (burst_len != 0) return;                  // flush armed a burst
   // Keepalive: re-burst the current tally on a cadence safely below the
   // receiver's 5 s no-signal timeout so receivers stay lit and resync even

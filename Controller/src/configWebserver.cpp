@@ -205,6 +205,13 @@ void setupWebserver() {
   WT32_ETH01_onEvent();
   ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER);
   WT32_ETH01_waitForConnect();
+  #elif defined(CONTROLLER_ETH_W5500)
+  // XIAO W5500 Ethernet Adapter: bring up the W5500 on the XIAO's SPI bus.
+  // Arduino core 3.x drives it in MACRAW mode via lwIP, so the HTTP and
+  // WebSocket servers below bind to the ETH interface automatically.
+  WiFi.onEvent(WiFiEvent);
+  SPI.begin(W5500_SCK, W5500_MISO, W5500_MOSI, W5500_CS);
+  ETH.begin(ETH_PHY_W5500, W5500_PHY_ADDR, W5500_CS, W5500_IRQ, W5500_RST, SPI);
   #else
   WiFi.onEvent(WiFiEvent);
   ETH.begin();
