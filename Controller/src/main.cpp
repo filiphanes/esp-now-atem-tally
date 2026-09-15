@@ -119,7 +119,15 @@ void applyPowerConfigStr(const String& s) {
 }
 
 void parsePowerConfig() {
-  applyPowerConfigStr(readPowerConfig());
+  String s = readPowerConfig();
+  if (s.length() == 0) {
+    // Fresh flash: key absent. Persist the struct defaults so NVS holds the
+    // key and boot stops logging NOT_FOUND; applyPowerConfigStr is a no-op on
+    // defaults but keeps the clamps honest if they ever change.
+    s = powerConfigStr();
+    writePowerConfig(s);
+  }
+  applyPowerConfigStr(s);
 }
 
 String powerConfigStr() {
@@ -130,7 +138,6 @@ String powerConfigStr() {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) delay(5);
 
   // Watchdog the loop task: a hung module (protocol parser, TCP stall,
   // webserver...) reboots the controller instead of silently dropping all

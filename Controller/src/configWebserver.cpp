@@ -15,7 +15,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 }
 
 void ws_tally() {
-  if (!programBits && !previewBits) return;
+  // Idle (all bits clear) is a real state: always send. The tally UI treats
+  // 3s of silence as a dead controller, so this is also the keepalive.
   String msg = "TALLY ";
   uint64_t b1 = programBits;
   uint64_t b2 = previewBits;
@@ -250,6 +251,13 @@ void setupWebserver() {
 }
 
 void webserverLoop() {
+  // Idle keepalive: the /tally UI warns after 3s of WS silence, so re-send the
+  // current state (even all-grey) on a 2s cadence.
+  static unsigned long lastKb = 0;
+  if (millis() - lastKb >= 2000) {
+    lastKb = millis();
+    ws_tally();
+  }
   web.handleClient();
   wsServer.loop();
 }
