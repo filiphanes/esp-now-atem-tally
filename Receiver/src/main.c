@@ -856,15 +856,21 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
   if (len < 1) return;
   espnow_command command = (espnow_command)data[0];
 #ifdef DEBUG
-  ESP_LOGI(TAG, "<[%d] ", command);
+  ESP_LOGI(TAG, "<[%d] len=%d", command, len);
 #endif
   switch (command) {
 
   case SET_TALLY: {
-    if (len < 1 + 16) break;  // need both bitmasks
-    uint64_t pgm, pvw;
+    if (len < 1 + 8) break;  // program bitmask is mandatory
+    uint64_t pgm, pvw = 0;
     memcpy(&pgm, data + 1, sizeof(pgm));            // memcpy: data is unaligned
-    memcpy(&pvw, data + 1 + sizeof(uint64_t), sizeof(pvw));
+    // Preview may arrive truncated: the Controller's burst buffer cuts the
+    // last byte off SET_TALLY (see startBurst in Controller/src/espNow.cpp),
+    // so copy only the preview bytes that arrived. Missing top byte => preview
+    // bits 56..63 read as 0 until the Controller is reflashed with the fix.
+    int pvw_len = len - 1 - (int)sizeof(pgm);
+    if (pvw_len > (int)sizeof(pvw)) pvw_len = (int)sizeof(pvw);
+    memcpy(&pvw, data + 1 + sizeof(pgm), pvw_len);
     latch_rx_work(SET_TALLY, 0, 0, 0, pgm, pvw);
     lastMessageReceived = millis();
 #ifdef DEBUG
