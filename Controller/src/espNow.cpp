@@ -46,7 +46,9 @@ static inline unsigned long keepalive_window_ms() {
 }
 static unsigned long burst_until = 0;   // 0 == idle
 static unsigned long burst_next  = 0;
-static uint8_t  burst_payload[16];
+// Sized to hold the largest payload (SET_TALLY = cmd + program + preview).
+// Too small here silently truncates the frame and receivers drop it.
+static uint8_t  burst_payload[1 + 2 * sizeof(uint64_t)];
 static uint8_t  burst_len = 0;
 static unsigned long sleep_until = 0;   // receivers sleep until this millis(); no new sends before it
 static bool tally_dirty = false;       // a tally change is pending a burst
