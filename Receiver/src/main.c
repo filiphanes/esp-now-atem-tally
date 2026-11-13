@@ -26,6 +26,18 @@ static const char *TAG = "tally";
 // Keep minumum current so powerbank will not shutoff
 #define BACKGROUND_COLOR 0,0,0
 
+// No-message indicator: after this long without an ESP-NOW packet, show a
+// single dim red pixel and step it one LED every NO_SIGNAL_STEP_MS, so an idle
+// receiver looks alive without the pixel racing along the strip at loop speed.
+#define NO_SIGNAL_TIMEOUT_MS 5000
+#define NO_SIGNAL_STEP_MS    3000
+#define NO_SIGNAL_POS_NONE   0xFF
+// Dim blue pixel: no other LEDs lit, so a low value still reads clearly while
+// keeping current (and heat) down.
+#define NO_SIGNAL_COLOR_R    0
+#define NO_SIGNAL_COLOR_G    0
+#define NO_SIGNAL_COLOR_B    48
+
 // Explicit ESP-NOW power-save.
 // The receiver is always listening by default (no implicit duty-cycling). When
 // the Controller finishes a burst it sends SLEEP(ms): we may then power down
@@ -1076,6 +1088,10 @@ void app_main() {
   // Receiver is always-on by default and only powers down its radio when told
   // to via SLEEP. Nothing to configure at boot.
 
+  // Last LED index used by the "no signal" indicator. NO_SIGNAL_POS_NONE
+  // forces a repaint the next time the indicator is drawn.
+  uint8_t noSignalPos = NO_SIGNAL_POS_NONE;
+
   // Loop
   while (1) {
     // On-board button: cycle camId 1..10 and persist to NVS.
@@ -1101,11 +1117,20 @@ void app_main() {
     // SET_TALLY on every change, so receiver presence detection is optional.
     // Re-enable with sendHeartbeat(); here if discovery is needed.
     delay(50);
-    if (millis() - lastMessageReceived > 5000) {
-      fillColorDirect(BACKGROUND_COLOR);
-      // Paint one pixel red to signify we haven't received message
-      setPixelColor(millis()%LED_COUNT, 128, 0, 0);
-      show();
+    if (millis() - lastMessageReceived > NO_SIGNAL_TIMEOUT_MS) {
+      // Paint one dim blue pixel to signify we haven't received message. Step
+      // it once per NO_SIGNAL_STEP_MS (time-based, so the pace stays steady)
+      // and only repaint when the position actually changes.
+      uint8_t noSignalPosNow = (uint8_t)(((millis() - lastMessageReceived) / NO_SIGNAL_STEP_MS) % LED_COUNT);
+      if (noSignalPosNow != noSignalPos) {
+        fillColorDirect(BACKGROUND_COLOR);
+        setPixelColor(noSignalPosNow, NO_SIGNAL_COLOR_R, NO_SIGNAL_COLOR_G, NO_SIGNAL_COLOR_B);
+        show();
+        noSignalPos = noSignalPosNow;
+      }
+    } else {
+      // Traffic is flowing again: re-arm the indicator for the next timeout.
+      noSignalPos = NO_SIGNAL_POS_NONE;
     }
     // TODO: read Serial.read();
   }
