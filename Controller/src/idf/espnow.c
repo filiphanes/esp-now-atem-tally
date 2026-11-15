@@ -1,16 +1,16 @@
 // ESP-NOW tally pump for the pure-IDF controller (port of src/espNow.cpp).
 //
-// The burst/sleep/keepalive behaviour is intentionally identical to the
-// Arduino build: every tally change arms a SET_TALLY burst (one packet per
-// burst_gap_ms for burst_ms), receivers are told to SLEEP after a burst when
-// sleep_ms > 0, and an idle keepalive re-bursts the current state below the
-// receiver's 5 s no-signal timeout.
+// The burst/sleep behaviour is intentionally identical to the Arduino build:
+// every tally change arms a SET_TALLY burst (one packet per burst_gap_ms for
+// burst_ms), and receivers are told to SLEEP after a burst when sleep_ms > 0.
 //
 // Differences from the Arduino source:
 //   * tally updates from other tasks only set a dirty flag; the packet pump
 //     runs in its own task, so nothing races the burst bookkeeping.
 //   * last-seen timestamps use esp_timer_get_time() and are protected by a
 //     critical section because the ESP-NOW callback runs in the WiFi task.
+//   * an idle keepalive sends one packet instead of a full burst (2 s window);
+//     a tally change still gets the full burst.
 
 #include "espnow.h"
 
@@ -30,7 +30,9 @@
 static const char *TAG = "espnow";
 
 #define ESPNOW_CHANNEL 1
-#define ESPNOW_KEEPALIVE_MIN_MS 1000u
+// Idle keepalive only needs to keep receivers from blanking (5 s timeout) and
+// resync a missed change; one packet every 2 s leaves room for a lost packet.
+#define ESPNOW_KEEPALIVE_MIN_MS 2000u
 #define ESPNOW_KEEPALIVE_MAX_MS 4000u
 #define ESPNOW_STALE_US (60LL * 1000 * 1000)
 #define ESPNOW_RESYNC_STREAK 3
@@ -47,7 +49,7 @@ static uint64_t s_preview_bits;
 static espnow_tally_info_t s_tallies[ESPNOW_MAX_TALLY];
 static espnow_power_t s_power = {
     .sleep_ms = 0,
-    .burst_ms = 300,
+    .burst_ms = 100,
     .burst_gap_ms = 20,
 };
 
@@ -58,6 +60,7 @@ static uint8_t s_burst_payload[1 + 2 * sizeof(uint64_t)];
 static uint8_t s_burst_len;
 static uint32_t s_sleep_until;
 static uint32_t s_last_message_at;
+static uint32_t s_last_prune_ms;
 static bool s_burst_active_prev;
 
 // The task that runs espnow_loop(); espnow_wake() pokes it so a tally change
@@ -138,6 +141,18 @@ static bool burst_tick(void)
     return true;
 }
 
+// Fills a SET_TALLY payload with the current bitmaps. `payload` must hold
+// 1 + 2 * sizeof(uint64_t) bytes.
+static void fill_tally_payload(uint8_t payload[1 + 2 * sizeof(uint64_t)])
+{
+    payload[0] = ESPNOW_SET_TALLY;
+    taskENTER_CRITICAL(&s_lock);
+    memcpy(payload + 1, &s_program_bits, sizeof(uint64_t));
+    memcpy(payload + 1 + sizeof(uint64_t), &s_preview_bits,
+           sizeof(uint64_t));
+    taskEXIT_CRITICAL(&s_lock);
+}
+
 static void flush_tally(void)
 {
     if (!s_tally_dirty) {
@@ -150,13 +165,7 @@ static void flush_tally(void)
     s_last_message_at = now_ms();
 
     uint8_t payload[1 + 2 * sizeof(uint64_t)];
-    payload[0] = ESPNOW_SET_TALLY;
-    taskENTER_CRITICAL(&s_lock);
-    memcpy(payload + 1, &s_program_bits, sizeof(uint64_t));
-    memcpy(payload + 1 + sizeof(uint64_t), &s_preview_bits,
-           sizeof(uint64_t));
-    taskEXIT_CRITICAL(&s_lock);
-
+    fill_tally_payload(payload);
     start_burst(payload, sizeof(payload), s_power.burst_ms);
 }
 
@@ -351,11 +360,19 @@ void espnow_sleep_all(uint16_t ms)
 
 static void prune_stale_tallies(void)
 {
-    const int64_t now = esp_timer_get_time();
+    uint32_t now = now_ms();
+    // The pump wakes for every burst packet; walking 64 slots at 50 Hz buys
+    // nothing, so prune on a 1 s cadence instead.
+    if ((int32_t)(now - s_last_prune_ms) < 1000) {
+        return;
+    }
+    s_last_prune_ms = now;
+
+    const int64_t now_us = esp_timer_get_time();
     taskENTER_CRITICAL(&s_lock);
     for (int i = 0; i < ESPNOW_MAX_TALLY; i++) {
         if (s_tallies[i].id != 0 &&
-            now - s_tallies[i].last_seen_us > ESPNOW_STALE_US) {
+            now_us - s_tallies[i].last_seen_us > ESPNOW_STALE_US) {
             s_tallies[i].id = 0;
             memset(s_tallies[i].mac_addr, 0, ESPNOW_MAC_LEN);
         }
@@ -410,6 +427,23 @@ static void push_sinks(void)
     vmix_server_tally(program, preview);
 }
 
+// Idle keepalive: one packet instead of a burst. Receivers blank after 5 s of
+// silence, and the 2 s window leaves room for a lost packet. When they are
+// duty-cycled (sleep_ms > 0) the SLEEP that a burst edge would normally send is
+// re-armed here, or they would stay awake after waking.
+static void send_keepalive(void)
+{
+    uint8_t payload[1 + 2 * sizeof(uint64_t)];
+    fill_tally_payload(payload);
+    send_raw(payload, sizeof(payload));
+    s_last_message_at = now_ms();
+
+    if (s_power.sleep_ms > 0) {
+        espnow_sleep_all(s_power.sleep_ms);
+        s_sleep_until = now_ms() + s_power.sleep_ms;
+    }
+}
+
 uint32_t espnow_loop(void)
 {
     s_pump_task = xTaskGetCurrentTaskHandle();
@@ -442,12 +476,13 @@ uint32_t espnow_loop(void)
                 s_tally_dirty = true;
                 flush_tally();
             }
-            // Idle keepalive: receivers blank after 5 s of silence.
+            // Idle keepalive: receivers blank after 5 s of silence. A change
+            // starts the full burst above; when the switcher is quiet one
+            // packet is enough to refresh the current state.
             if (s_burst_len == 0 &&
                 (uint32_t)(now_ms() - s_last_message_at) >
                     keepalive_window_ms()) {
-                s_tally_dirty = true;
-                flush_tally();
+                send_keepalive();
             }
         }
     }

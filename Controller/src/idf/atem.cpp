@@ -7,9 +7,9 @@
 // differences from the Arduino build:
 //   * the switcher port comes from the config (g_config.port) instead of the
 //     hardcoded 9910;
-//   * the client runs in its own task that blocks in select() on the socket,
-//     so a tally packet is handled as soon as it arrives instead of at the
-//     next loop() tick;
+//   * the client runs in its own task that blocks in select() on the socket
+//     (plus a loopback wake pair for /cut), so a tally packet is handled as
+//     soon as it arrives instead of at the next loop() tick;
 //   * /cut and /auto never send from the HTTP task: they leave a pending
 //     switch request for the client task to perform, so all UDP I/O stays in
 //     one task and `s_pkt`/the socket never race the HTTP task.
@@ -63,6 +63,12 @@ static bool s_was_connected = false;        // for connect/disconnect logging
 static int64_t s_last_contact_us = 0;
 static uint8_t s_missed_init[(MAX_INIT_PACKETS + 7) / 8];  // bitmap of missing ids
 static uint8_t s_pkt[PKT_MAX];
+
+// Loopback datagram pair used to break the client task out of select() when
+// the HTTP task queues a switch, so the task can block for a second instead of
+// polling every 20 ms. Same pattern as vmix_server.c.
+static int s_wake_rx = -1;
+static int s_wake_tx = -1;
 
 // ---- tally state (bit i-1 == input i) ----
 static uint64_t s_program_bits = 0;
@@ -162,6 +168,70 @@ static void atem_connect(void)
 }
 
 // ---------------------------------------------------------------------------
+// Wake-up pair (HTTP task -> client task)
+// ---------------------------------------------------------------------------
+
+// Create a tiny loopback UDP pair: the HTTP task pokes one byte into it and
+// select() wakes immediately, so /cut does not have to wait for the 1 s
+// watchdog timeout.
+static void wake_init(void)
+{
+    int rx = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (rx < 0) {
+        ESP_LOGW(TAG, "wakeup socket failed: errno %d", errno);
+        return;
+    }
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(0x7f000001u);   // 127.0.0.1
+    addr.sin_port = 0;                            // any free port
+    socklen_t addr_len = sizeof(addr);
+    if (bind(rx, (const struct sockaddr *)&addr, sizeof(addr)) < 0 ||
+        getsockname(rx, (struct sockaddr *)&addr, &addr_len) < 0) {
+        ESP_LOGW(TAG, "wakeup socket bind failed: errno %d", errno);
+        close(rx);
+        return;
+    }
+
+    int tx = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (tx < 0 ||
+        connect(tx, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        ESP_LOGW(TAG, "wakeup socket connect failed: errno %d", errno);
+        if (tx >= 0) {
+            close(tx);
+        }
+        close(rx);
+        return;
+    }
+
+    // Neither end may block: the poke comes from the HTTP task, the drain from
+    // the client task. Publish the descriptors only once both are connected,
+    // so a /cut racing this setup never pokes a half-initialised socket.
+    fcntl(rx, F_SETFL, fcntl(rx, F_GETFL, 0) | O_NONBLOCK);
+    fcntl(tx, F_SETFL, fcntl(tx, F_GETFL, 0) | O_NONBLOCK);
+    s_wake_rx = rx;
+    s_wake_tx = tx;
+}
+
+static void wake_poke(void)
+{
+    if (s_wake_tx >= 0) {
+        char byte = 0;
+        send(s_wake_tx, &byte, 1, MSG_DONTWAIT);
+    }
+}
+
+static void wake_drain(void)
+{
+    char scratch[8];
+    while (s_wake_rx >= 0 &&
+           recv(s_wake_rx, scratch, sizeof(scratch), MSG_DONTWAIT) > 0) {
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Receive path
 // ---------------------------------------------------------------------------
 
@@ -228,22 +298,31 @@ void atem_request_switch(uint8_t tally_num, bool auto_transition)
     s_switch_auto = auto_transition;
     s_switch_pending = true;
     taskEXIT_CRITICAL(&s_switch_lock);
+
+    wake_poke();
 }
 
 // ---------------------------------------------------------------------------
 // Client task
 // ---------------------------------------------------------------------------
 
-// Blocks until a datagram arrives on the switcher socket. The receive path is
-// event-driven; the timeout only bounds how often the watchdog and
-// pending-switch bookkeeping get a turn.
+// Blocks until a datagram or a switch request arrives. The receive path is
+// event-driven; the one-second timeout only bounds the watchdog feed and the
+// reconnect check, and the wake pair makes /cut immediate.
 static void wait_for_rx(void)
 {
     fd_set read_fds;
     FD_ZERO(&read_fds);
     FD_SET(s_sock, &read_fds);
-    struct timeval tv = { .tv_sec = 0, .tv_usec = 20 * 1000 };
-    select(s_sock + 1, &read_fds, NULL, NULL, &tv);
+    int max_fd = s_sock;
+    if (s_wake_rx >= 0) {
+        FD_SET(s_wake_rx, &read_fds);
+        if (s_wake_rx > max_fd) {
+            max_fd = s_wake_rx;
+        }
+    }
+    struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
+    select(max_fd + 1, &read_fds, NULL, NULL, &tv);
 }
 
 // One pass: wait for a packet, drain what arrived, then run init recovery, the
@@ -253,6 +332,8 @@ static void atem_run(void)
     if (s_sock >= 0) {
         wait_for_rx();
     }
+    wake_drain();   // the poke is only a wake-up; the request itself is a flag
+
     // Drain all pending datagrams; each recv() consumes exactly one, so a bad
     // length cannot corrupt the next one.
     while (s_sock >= 0) {
@@ -374,6 +455,7 @@ esp_err_t atem_setup(void)
     esp_ip4addr_ntoa(&g_config.ip, ip, sizeof(ip));
     ESP_LOGI(TAG, "target %s:%u", ip, g_config.port);
 
+    wake_init();
     atem_connect();
 
     BaseType_t ok = xTaskCreate(atem_task, "atem", 4096, NULL, 5, NULL);

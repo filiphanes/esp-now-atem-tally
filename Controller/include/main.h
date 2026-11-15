@@ -23,7 +23,7 @@ struct controller_config {
     // (receivers stay always-on). The controller stays silent for sleep_ms so
     // it does not waste packets a sleeping receiver cannot hear.
     uint16_t sleep_ms        = 0;    // ms receivers may sleep after a burst (0 => always-on, default)
-    uint16_t tally_burst_ms  = 300;  // ms, >= a few * tally_burst_gap
+    uint16_t tally_burst_ms  = 100;  // ms, >= a few * tally_burst_gap
     uint16_t tally_burst_gap = 20;   // ms, <= tally_burst_ms
 };
 

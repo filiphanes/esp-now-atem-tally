@@ -93,11 +93,22 @@ Notes:
   eFuse (`esp_read_mac(..., ESP_MAC_ETH)`); without that DHCP went out with
   `00:00:00:00:00:00`.
 - The input paths are event-driven rather than polled: the W5500 raises its
-  INTn interrupt, the ATEM client blocks in `select()` on its socket, the vMix
-  server blocks in `select()` and is poked over a loopback socket when the
-  tally changes, and the ESP-NOW burst pump sleeps on a task notification until
-  its next deadline. The Arduino build drives all of this from a `loop()` on a
-  20 ms `delay()`, which adds up to 20 ms of latency to every input.
+  INTn interrupt, the ATEM and vMix clients block in `select()` and are woken
+  by the socket itself (the ATEM client also has a loopback wake pair for
+  `/cut`), the vMix server blocks in `select()` and is poked over a loopback
+  socket when the tally changes, and the ESP-NOW burst pump sleeps on a task
+  notification until its next deadline. Only the watchdog feed uses a timeout
+  (1 s in the ATEM and vMix clients), so a `/cut` goes out immediately and the
+  idle tasks stay asleep. The Arduino build drives all of this from a `loop()`
+  on a 20 ms `delay()`, which adds up to 20 ms of latency to every input.
+- The ESP-NOW pump sends the full `burst_ms` burst on a tally change (five
+  packets with the default 100 ms burst / 20 ms gap), then a single packet per
+  keepalive window (2 s floor) so an idle controller does not re-broadcast an
+  unchanged tally. A SLEEP command follows the keepalive when `sleep_ms > 0`,
+  so the receiver duty cycle keeps running.
+- The app is built with `CONFIG_COMPILER_OPTIMIZATION_SIZE` (the IDF default is
+  `-Og`; `-Os` is ~9% smaller here) and silent assertions. The station WiFi
+  buffers are trimmed too, since that interface only carries ESP-NOW.
 - One task owns every output. A tally change only latches the new state and
   wakes the pump task, which then pushes the WebSocket frame and the vMix TCP
   update and runs the ESP-NOW burst. Protocol tasks therefore never do sink
@@ -218,6 +229,7 @@ new target is picked up; the response is sent before the restart.
 
 ## GET /power, PUT /power
 ESP-NOW power-save tunables as `ws=<sleep_ms>&wb=<burst_ms>&wg=<gap_ms>`.
+The defaults are `ws=0&wb=100&wg=20`, i.e. five packets per tally change.
 `PUT` clamps (gap <= burst), applies and persists them.
 
 ## POST /cut, POST /auto

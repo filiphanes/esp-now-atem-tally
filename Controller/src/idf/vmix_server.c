@@ -283,25 +283,27 @@ static void push_tally(void)
             continue;
         }
 
-        // Two passes at most: finish a line that was only partially written,
-        // then queue the state that changed while it was in flight.
-        for (int pass = 0; pass < 2; pass++) {
-            if (!cl->pushing) {
-                if (!changed && !cl->pending) {
-                    break;
-                }
-                format_tally(cl->push_line, program, preview);
-                cl->push_len = strlen(cl->push_line);
-                cl->push_sent = 0;
-                cl->pushing = true;
-                cl->pending = false;
-            }
+        // Finish a line that was only partially written first; a newer state
+        // must wait for it so the client never sees two states spliced
+        // together.
+        if (cl->pushing) {
             if (!push_line_out(cl)) {
-                break;  // partially sent (retried on the next tick) or closed
+                continue;  // still partial (retried next tick) or closed
             }
-            if (!changed) {
-                break;  // the client is up to date
-            }
+        }
+        if (cl->fd < 0) {
+            continue;  // push_line_out() dropped the client
+        }
+
+        // Queue the newest state if one is due. This is a fresh line, so it is
+        // attempted once; any remainder is retried on the next tick.
+        if (changed || cl->pending) {
+            format_tally(cl->push_line, program, preview);
+            cl->push_len = strlen(cl->push_line);
+            cl->push_sent = 0;
+            cl->pushing = true;
+            cl->pending = false;
+            push_line_out(cl);
         }
     }
 }

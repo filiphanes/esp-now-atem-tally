@@ -19,8 +19,10 @@
 #include "ws.h"
 
 #include "esp_event.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_system.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -53,7 +55,7 @@ static void pump_task(void *arg)
 // the key and boot stops logging NOT_FOUND.
 static void power_load(void)
 {
-    static const char *const DEFAULTS = "ws=0&wb=300&wg=20";
+    static const char *const DEFAULTS = "ws=0&wb=100&wg=20";
     char buf[64];
     esp_err_t err = config_get_power_raw(buf, sizeof(buf));
     if (err == ESP_ERR_NOT_FOUND || (err == ESP_OK && buf[0] == '\0')) {
@@ -126,6 +128,12 @@ void app_main(void)
         ESP_LOGE(TAG, "pump task create failed");
         return;
     }
+
+    // Baseline for the heap budget: the WiFi/lwIP/task allocations are all up
+    // at this point. Useful when tuning the buffer counts in sdkconfig.
+    ESP_LOGI(TAG, "heap after boot: %u bytes free, largest block %u",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
 
     ESP_LOGI(TAG, "waiting for DHCP lease on the W5500 link");
 }

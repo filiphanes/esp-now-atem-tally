@@ -8,7 +8,7 @@
 //   GET  /seen         -> receiver list with ages
 //   GET  /config       -> stored config URI (NVS; empty when never set)
 //   PUT  /config       -> store the config URI and reboot into it
-//   GET  /power        -> "ws=0&wb=300&wg=20"
+//   GET  /power        -> "ws=0&wb=100&wg=20"
 //   PUT  /power        -> clamps, applies and persists the tunables
 //   POST /set          -> camid/brightness/color/signal for selected tallies
 //   POST /cut,/auto    -> switch the first selected tally (ATEM cut/auto,

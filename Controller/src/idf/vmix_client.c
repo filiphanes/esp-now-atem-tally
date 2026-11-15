@@ -36,10 +36,10 @@
 static const char *TAG = "vmix";
 
 #define VMIX_LINE_MAX 1024
-// How long the client waits for data before running housekeeping. It only
-// bounds the reconnect bookkeeping: an incoming line is handled the moment
-// select() reports it.
-#define VMIX_WAIT_MS 20
+// How long the client blocks when vMix is quiet. An incoming line wakes
+// select() immediately; the timeout only bounds how often the watchdog is fed,
+// so a second is plenty and keeps the idle task asleep.
+#define VMIX_WAIT_MS 1000
 #define VMIX_RETRY_MIN_MS 1000u
 #define VMIX_RETRY_MAX_MS 30000u
 #define VMIX_CONNECT_TIMEOUT_S 3
@@ -173,7 +173,7 @@ static bool vmix_connect(void)
 }
 
 // Blocks until the server sends something. The receive path is event-driven;
-// the timeout only bounds how often the reconnect bookkeeping gets a turn.
+// the timeout only bounds how often the watchdog gets fed.
 static void wait_for_rx(void)
 {
     fd_set read_fds;
