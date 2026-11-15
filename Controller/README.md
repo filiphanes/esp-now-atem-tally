@@ -34,6 +34,125 @@ pio run -e xiao-w5500 -t upload     # flash over USB (USB-Serial/JTAG, auto-rese
   one framework package slot by design). Expect a one-time multi-minute delay
   after switching; keep building one env at a time to avoid it.
 
+# Pure ESP-IDF port (experimental)
+
+`[env:xiao-w5500-idf]` is a from-scratch ESP-IDF implementation of the same XIAO
+W5500 controller, built on the stock `espressif32` platform so it shares the
+Receiver's IDF 6.0.1 toolchain. Sources live in `src/idf/` and are excluded from
+the Arduino environments via `build_src_filter`.
+
+```bash
+pio run -e xiao-w5500-idf              # build
+pio run -e xiao-w5500-idf -t upload    # flash over USB-Serial/JTAG
+```
+
+Status by slice:
+
+- [x] W5500 bring-up (SPI2, polling, DHCP), HTTP server, embedded UI pages
+- [x] WebSocket tally feed on port 81 (2 s keepalive, same frame format)
+- [x] OSC UDP on port 57110
+- [x] ESP-NOW tally pump (WiFi STA brought up alongside ETH, channel 1, LR)
+- [x] mDNS advertisement (`tally.local`, `TallyBridge._http._tcp`)
+- [x] NVS config persistence (`/config` stores the URI and reboots into it,
+  `/power` is stored in `tally:power`; same namespace/keys as Preferences in
+  the Arduino build, so a board keeps its settings across firmwares)
+- [x] ATEM client (handshake, init recovery, `TlIn` tally, `/cut` and `/auto`)
+- [x] vMix client (`SUBSCRIBE TALLY`, 1 s -> 30 s reconnect backoff) and the
+  TCP tally server on port 8099 for vMix-protocol clients
+- [x] OBS client (obs-websocket v5: scene names tagged `T<n>`, `/cut` and
+  `/auto` switch to the scene tagged with the selected tally)
+- [x] Task watchdog (5 s, panic on timeout) on every long-running task
+- [x] Over-the-air ESP-NOW verified against a Receiver (tally burst, SLEEP,
+  SET_CAMID / SIGNAL / SET_COLOR)
+
+Notes:
+
+- IDF 6.0 moved the SPI Ethernet drivers out of `esp_eth`; the W5500 driver is
+  pulled from the component registry through `src/idf_component.yml`
+  (`espressif/w5500`), so the first build downloads it.
+- IDF 6.0 also moved mDNS out of the core components; `espressif/mdns` comes
+  from the same manifest. The controller advertises `tally.local` and
+  `TallyBridge._http._tcp` on port 80, matching the Arduino build.
+- The console runs on the S3's USB Serial/JTAG (see `sdkconfig.defaults`), not
+  UART0, because the XIAO has no USB-UART bridge.
+- The HTML pages under `src/idf/web/` are symlinks into `data/`, so both builds
+  serve the same files. `src/CMakeLists.txt` embeds them at CMake configure
+  time, which PlatformIO does not re-run after a page edit, so
+  `scripts/embed_pages.py` refreshes the generated assembly before every build;
+  without it an edited page would stay stale until the build directory was
+  cleaned.
+- `sdkconfig.defaults` only seeds a *new* generated `sdkconfig.<env>`; ESP-IDF
+  keeps whatever value is already set in an existing one. After changing the
+  defaults (e.g. the socket pool), delete `Controller/sdkconfig.xiao-w5500-idf`
+  (git-ignored) and rebuild.
+- The app partition is `partitions_singleapp_large.csv` (1.5 MB factory). The
+  stock 1 MB layout no longer fits; PlatformIO always regenerates
+  `partitions.bin` from `board_build.partitions`, ignoring
+  `CONFIG_PARTITION_TABLE_*`.
+- The W5500 has no factory MAC, so the IDF build seeds it from the ESP32-S3
+  eFuse (`esp_read_mac(..., ESP_MAC_ETH)`); without that DHCP went out with
+  `00:00:00:00:00:00`.
+- The input paths are event-driven rather than polled: the W5500 raises its
+  INTn interrupt, the ATEM client blocks in `select()` on its socket, the vMix
+  server blocks in `select()` and is poked over a loopback socket when the
+  tally changes, and the ESP-NOW burst pump sleeps on a task notification until
+  its next deadline. The Arduino build drives all of this from a `loop()` on a
+  20 ms `delay()`, which adds up to 20 ms of latency to every input.
+- One task owns every output. A tally change only latches the new state and
+  wakes the pump task, which then pushes the WebSocket frame and the vMix TCP
+  update and runs the ESP-NOW burst. Protocol tasks therefore never do sink
+  work, and rapid changes coalesce into one push instead of one per
+  intermediate state (before this only the radio burst coalesced, which is why
+  the WebSocket path used to show ~75 ms outliers).
+- Every long-running task subscribes to the ESP-IDF task watchdog
+  (`watchdog.c`, 5 s, panic on timeout) and bounds its waits so it can feed: a
+  hang anywhere now reboots the controller instead of silently dropping a
+  source. That is what `enableLoopWDT()` does for `loop()` in the Arduino
+  build. The `esp_http_server` tasks are the exception -- they belong to the
+  component and are not subscribed.
+- That interrupt line is only wired on the W5500 Ethernet Adapter from **V1.2**
+  on (Seeed's "INT pin wiring fix, D16 -> W5500 INTn", 2025/12/01; D16 is
+  GPIO10 on the XIAO ESP32-S3 Plus). On an "Early Build" adapter INTn floats,
+  so interrupt mode would stall RX completely -- build those with
+  `-D XIAO_W5500_POLLING=1` to fall back to the 10 ms poll. The boot log states
+  which mode is active.
+- The IDF OSC parser follows OSC 1.0 (the type tag starts after the address's
+  NUL terminator, at `align4(addr_len + 1)`, and int32 args are big-endian)
+  and accepts `0` digits in addresses, so tally ids 10-64 work. The Arduino
+  implementation scans one byte late, uses `align4(addr_len)` (which skips the
+  type tag entirely for 8-char addresses like `/program` and `/preview`),
+  skips the byte swap and treats `0` as a separator; this port intentionally
+  does not copy those bugs.
+- The ATEM client reuses the wire-format layer in `lib/ATEMmini` but runs on
+  BSD nonblocking UDP and `esp_timer`, and `/cut`/`/auto` only leave a pending
+  switch request for the client task to send, so all UDP I/O stays in one
+  task. `src/idf/atem.cpp` is C++ (ATEMmini is namespaced), which makes
+  PlatformIO feed the merged C/C++ flag set to the whole `src/` component;
+  `build_unflags = -fuse-cxa-atexit` in `[env:xiao-w5500-idf]` removes the
+  C++-only option that would otherwise break every C file there.
+- The vMix client and the port-8099 tally server each run in their own task,
+  where the Arduino build polls both from `loop()`. Nothing blocks between
+  them: connect() is bounded by a 3 s timeout and every read/write is
+  nonblocking, so a dead or slow host cannot stall the ESP-NOW burst pump. The
+  server reports an input on program *and* preview as `3` (the Arduino server
+  only emits `1` there) and always sends 64 state characters, including before
+  the first update (the Arduino server sends `TALLY OK 0`).
+- The OBS client keeps the same scene-name tagging as the Arduino build
+  (`T3 Cam` == input 3, `T1,T2` == inputs 1 and 2, a downstream-keyer overlay
+  ORs its tags onto program) but updates only the half of the tally it owns, so
+  a scene event cannot clobber an OSC/ATEM/vMix update to the other bus; only
+  a transition (program |= preview) touches both. It reassembles fragmented
+  messages before parsing and builds its requests with cJSON, so scene names
+  containing quotes or backslashes are escaped correctly. Like the Arduino
+  build there is no authentication: the OBS websocket server must accept the
+  connection without a password.
+- Small deliberate divergences from the Arduino build: the switcher port comes
+  from the config URI instead of the hardcoded 9910, a config URI with an
+  invalid address or a port outside 1..65535 is ignored rather than stored,
+  `PUT /power` persists the canonical (clamped) string so a partial body cannot
+  silently reset the other tunables on the next boot, and `PUT /config`
+  replies before restarting (50 ms timer) instead of blocking in the handler.
+
 # Protocol Selection
 Access the web UI at the device's IP address. Select the switcher protocol:
 - ATEM: Blackmagic Design ATEM switcher (default)
@@ -92,6 +211,22 @@ Returns list of connected tallies and their last-seen time:
 {"tallies":[{"id":1,"seen":5},{"id":2,"seen":120}]}
 ```
 
+## GET /config, PUT /config
+Reads or writes the switcher URI (the first line is what counts, see
+`Protocol Selection` below). `PUT` stores it and restarts the controller so the
+new target is picked up; the response is sent before the restart.
+
+## GET /power, PUT /power
+ESP-NOW power-save tunables as `ws=<sleep_ms>&wb=<burst_ms>&wg=<gap_ms>`.
+`PUT` clamps (gap <= burst), applies and persists them.
+
+## POST /cut, POST /auto
+Switch the first tally named in `?i=` (same CSV syntax as `/set`): ATEM puts it
+straight on program (`/auto` runs an AUTO transition), OBS switches to the
+scene tagged `T<n>` (`/auto` sets the preview scene and triggers a transition,
+which needs OBS Studio Mode). vMix has no switch action, same as the Arduino
+build.
+
 # Configuration
 Configure via web UI:
 - protocol: ATEM, OBS, or vMix
@@ -101,7 +236,10 @@ Configure via web UI:
 - bg: Background color in hex (e.g., 001E1E for dark grey)
 
 # OSC Protocol
-UDP server on port 8000. Supports:
+UDP server on port 57110. Supports:
+
+Type tags may be omitted when every argument is int32: `/program 2` and
+`/program ,i 2` are equivalent.
 
 ## /tally[program,preview]
 Set both program and preview tallies. First arg = program, second arg = preview. Values are tally numbers.

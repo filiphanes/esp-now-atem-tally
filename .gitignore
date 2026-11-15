@@ -1,1 +1,11 @@
 .DS_Store
+
+# Generated per-env ESP-IDF config caches (regenerated from sdkconfig.defaults)
+Receiver/sdkconfig.*
+!Receiver/sdkconfig.defaults
+Controller/sdkconfig.*
+!Controller/sdkconfig.defaults
+
+# Components downloaded by the ESP-IDF component manager (see
+# Controller/src/idf_component.yml). dependencies.lock stays tracked.
+Controller/managed_components/

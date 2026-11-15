@@ -1,0 +1,35 @@
+# ESP-IDF defaults for [env:xiao-w5500-idf].
+#
+# The XIAO ESP32-S3 exposes the native USB Serial/JTAG peripheral, not a UART
+# bridge, so the console has to move off UART0 or nothing shows up in
+# `pio device monitor`.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=n
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# The Arduino build is already 1.26 MB. Once the tally stack is ported this app
+# will not fit the default 1 MB single-app layout, so reserve the large one now
+# rather than discover it mid-port.
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# The board JSON declares 8 MB; without this IDF keeps its 2 MB default and
+# PlatformIO aborts the build with a flash-size mismatch warning.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# The tally feed on port 81 is a plain-httpd WebSocket endpoint; without this
+# the httpd_ws_* API and the `is_websocket` URI flag are compiled out.
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# Every socket in the build comes out of this lwIP pool: two httpd instances
+# (each reserves 3 internal sockets plus up to max_open_sockets clients, see the
+# caps in web.c/ws.c), the OSC socket, the vMix listener, the vMix wake-up pair,
+# mDNS, and one each for ATEM, the vMix client and the OBS websocket, plus up to
+# 8 vMix tally subscribers. The fixed set alone is ~14 sockets before any
+# browser connects, so the old 16 left almost no headroom; 32 covers the
+# worst case (~30) for a few KiB of RAM.
+CONFIG_LWIP_MAX_SOCKETS=32
+
+# HTTP clients, the vMix subscribers and the OBS websocket are all active TCP
+# connections, so the default of 16 would be the limit long before the socket
+# pool is full.
+CONFIG_LWIP_MAX_ACTIVE_TCP=24
