@@ -61,6 +61,8 @@ Status by slice:
   TCP tally server on port 8099 for vMix-protocol clients
 - [x] OBS client (obs-websocket v5: scene names tagged `T<n>`, `/cut` and
   `/auto` switch to the scene tagged with the selected tally)
+- [x] ATEM LAN discovery for the web UI (`GET /discover`, UDP 9910 broadcast
+  plus the `_blackmagic._tcp` mDNS service)
 - [x] Task watchdog (5 s, panic on timeout) on every long-running task
 - [x] Over-the-air ESP-NOW verified against a Receiver (tally burst, SLEEP,
   SET_CAMID / SIGNAL / SET_COLOR)
@@ -170,6 +172,12 @@ Access the web UI at the device's IP address. Select the switcher protocol:
 - OBS: OBS WebSocket (port 4455)
 - vMix: vMix via TCP (default port 8099)
 
+The web UI discovers ATEM switchers automatically on page load (UDP 9910
+broadcast and the `_blackmagic._tcp` mDNS service) and shows them together with
+clickable `atem://`, `obs://` and `vmix://` examples in one list. Clicking any
+entry puts its URI on the first config line. vMix and OBS are not discoverable
+(they do not advertise themselves), so pick their example and edit the address.
+
 # vMix TCP Tally
 The controller can both receive tally from vMix and provide tally data to receivers via TCP:
 
@@ -231,6 +239,19 @@ new target is picked up; the response is sent before the restart.
 ESP-NOW power-save tunables as `ws=<sleep_ms>&wb=<burst_ms>&wg=<gap_ms>`.
 The defaults are `ws=0&wb=100&wg=20`, i.e. five packets per tally change.
 `PUT` clamps (gap <= burst), applies and persists them.
+
+## GET /discover
+Queries the `_blackmagic._tcp` mDNS service and broadcasts the ATEM discovery
+hello on UDP 9910, then returns the switchers found by either method:
+```json
+{"devices":[{"type":"atem","name":"ATEM Television Studio","ip":"192.168.1.50","port":9910,"uri":"atem://192.168.1.50"}]}
+```
+The scan blocks for about 1.2 s. mDNS supplies the real instance name and IP; it
+can list a switcher on a different subnet when it shares the L2 segment, but
+the controller still needs an IP route to that address to control it. vMix and
+OBS have no LAN discovery protocol (vMix's TCP API is connect-only and
+obs-websocket does not advertise), so their examples are meant to be edited
+manually.
 
 ## POST /cut, POST /auto
 Switch the first tally named in `?i=` (same CSV syntax as `/set`): ATEM puts it

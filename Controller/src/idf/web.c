@@ -10,6 +10,8 @@
 //   PUT  /config       -> store the config URI and reboot into it
 //   GET  /power        -> "ws=0&wb=100&wg=20"
 //   PUT  /power        -> clamps, applies and persists the tunables
+//   GET  /discover     -> ATEM switchers found by a UDP 9910 broadcast and
+//                         the _blackmagic._tcp mDNS service
 //   POST /set          -> camid/brightness/color/signal for selected tallies
 //   POST /cut,/auto    -> switch the first selected tally (ATEM cut/auto,
 //                         OBS scene; vMix has no switch action)
@@ -33,6 +35,7 @@
 
 #include "atem.h"
 #include "config.h"
+#include "discovery.h"
 #include "espnow.h"
 #include "obs_client.h"
 #include "ws.h"
@@ -333,6 +336,61 @@ static esp_err_t power_put(httpd_req_t *req)
     return httpd_resp_sendstr(req, reply);
 }
 
+// GET /discover -- one blocking ATEM scan (~1.2 s: mDNS + UDP broadcast). The
+// httpd task serves requests serially, so two browsers cannot start scans at
+// once.
+static esp_err_t discover_get(httpd_req_t *req)
+{
+    discovery_device_t devices[DISCOVERY_MAX_DEVICES];
+    size_t count = discovery_scan(devices, DISCOVERY_MAX_DEVICES, 600);
+
+    // Heap allocated: with the mDNS names the body no longer fits the httpd
+    // task's 4 KB stack (the config handler has the same constraint).
+    const size_t cap = 32 + DISCOVERY_MAX_DEVICES * 192;
+    char *body = malloc(cap);
+    if (body == NULL) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "out of memory");
+    }
+
+    size_t pos = 0;
+    int n = snprintf(body, cap, "{\"devices\":[");
+    if (n > 0) {
+        pos = (size_t)n;
+    }
+    for (size_t i = 0; i < count && pos < cap; i++) {
+        const char *name =
+            devices[i].name[0] != '\0' ? devices[i].name : "ATEM";
+        char uri[40];
+        if (devices[i].port == 0 || devices[i].port == 9910) {
+            snprintf(uri, sizeof(uri), "atem://%.15s", devices[i].ip);
+        } else {
+            snprintf(uri, sizeof(uri), "atem://%.15s:%u", devices[i].ip,
+                     (unsigned)devices[i].port);
+        }
+
+        n = snprintf(body + pos, cap - pos,
+                     "%s{\"type\":\"atem\",\"name\":\"%s\",\"ip\":\"%s\","
+                     "\"port\":%u,\"uri\":\"%s\"}",
+                     i == 0 ? "" : ",", name, devices[i].ip,
+                     (unsigned)devices[i].port, uri);
+        if (n <= 0 || (size_t)n >= cap - pos) {
+            break;
+        }
+        pos += (size_t)n;
+    }
+    if (pos + 3 <= cap) {
+        memcpy(body + pos, "]}", 3);
+        pos += 2;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    esp_err_t err = httpd_resp_send(req, body, pos);
+    free(body);
+    return err;
+}
+
 static esp_err_t seen_get(httpd_req_t *req)
 {
     espnow_tally_info_t tallies[ESPNOW_MAX_TALLY];
@@ -483,7 +541,7 @@ esp_err_t web_start(void)
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_restart_timer));
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-    // Default cap is 8; this build registers 12 routes.
+    // Default cap is 8; this build registers 13 routes.
     cfg.max_uri_handlers = 16;
     // The default of 7 concurrent clients would starve the lwIP socket pool
     // once the protocol clients and the port-81 server are up (each httpd
@@ -506,6 +564,7 @@ esp_err_t web_start(void)
     ESP_ERROR_CHECK(register_get(server, "/config", config_get));
     ESP_ERROR_CHECK(register_get(server, "/power", power_get));
     ESP_ERROR_CHECK(register_get(server, "/seen", seen_get));
+    ESP_ERROR_CHECK(register_get(server, "/discover", discover_get));
 
     ESP_ERROR_CHECK(register_method(server, "/set", HTTP_POST, set_post));
     ESP_ERROR_CHECK(register_method(server, "/cut", HTTP_POST, cut_post));

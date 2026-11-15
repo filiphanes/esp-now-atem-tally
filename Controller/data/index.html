@@ -10,6 +10,7 @@ textarea{background:#000;border:0;padding:.5rem;color:#d0d0d0;width:30rem;max-wi
 button{line-height:2.5rem;text-align:center;width:2.5rem;background:#333;color:#FFF;border:0;border-radius:.5rem;cursor:pointer;}
 button:hover{background:#777;}
 button.set{width:7rem;padding:0 .7rem;}
+#devices button.set{width:auto;padding:0 .8rem;font-family:monospace;font-size:.75rem;white-space:nowrap;}
 i{line-height:2.5rem;width:2.5rem;text-align:center;display:inline-block;background:#333;border-radius:.5rem;cursor:pointer;border:1px solid black;}
 i.pvw{background:green;}
 i.pgm{background:red;}
@@ -33,12 +34,11 @@ input[type=number]{background:#000;color:#d0d0d0;border:1px solid #333;border-ra
 <textarea id="cfg" rows="5" columns="40" placeholder="protocol://ip:port?param=value"></textarea>
 </div>
 <button onclick="save()" class="set">Save & Restart</button>
-<pre>Only first line is used, rest are your presets
-Examples:
-atem://192.168.88.240
-obs://192.168.88.50:4455
-vmix://192.168.88.10:8099
-</pre>
+<div class="row" id="devices"></div>
+<div class="row" id="discMsg" style="font-size:.75rem;color:#999"></div>
+<div class="row" style="font-size:.7rem;color:#666;max-width:31rem">
+Only the first line is used; the rest are your presets.
+</div>
 <div class="row power" style="max-width:40rem;">
   <div class="row" style="margin:0"><b>Tally power / responsiveness (receiver sleep)</b></div>
   <div class="row" style="margin:.3rem 0">
@@ -95,6 +95,48 @@ function brightness(){post('/set?brightness='+$('brightness').value+'&i='+inputs
 function color(c){post('/set?color='+c.toString(16)+'&i='+inputs())}
 function signal(n){post('/set?signal='+n+'&i='+inputs())}
 function save(){localStorage.setItem('cfg',$('cfg').value);put('/config',$('cfg').value)}
+var examples=['atem://192.168.88.240','obs://192.168.88.50:4455','vmix://192.168.88.10:8099'];
+function useUri(uri){
+  var lines=$('cfg').value.split('\n');
+  lines[0]=uri;
+  $('cfg').value=lines.join('\n');
+  $('discMsg').textContent='First line set to '+uri+' — press Save & Restart';
+  $('cfg').focus()
+}
+function addTarget(label,uri,tip){
+  var b=document.createElement('button');
+  b.className='set';
+  b.textContent=label;
+  b.title=tip||uri;
+  b.addEventListener('click',function(){useUri(uri)});
+  $('devices').appendChild(b)
+}
+function renderTargets(devices){
+  $('devices').innerHTML='';
+  var seen={};
+  devices.forEach(function(dev){
+    seen[dev.uri]=true;
+    addTarget((dev.name||dev.type.toUpperCase())+' '+dev.ip,dev.uri)
+  });
+  examples.forEach(function(uri){
+    if(!seen[uri])addTarget(uri,uri,'Example — click to put it on the first config line')
+  })
+}
+function discover(){
+  var x=new XMLHttpRequest();
+  $('discMsg').textContent='Searching for ATEM switchers…';
+  renderTargets([]);
+  x.open('get','/discover');
+  x.onload=function(){
+    var res={};
+    try{res=JSON.parse(x.responseText)}catch(e){}
+    var list=(res&&res.devices)||[];
+    renderTargets(list);
+    $('discMsg').textContent=''
+  };
+  x.onerror=function(){renderTargets([]);$('discMsg').textContent='Discovery unavailable'};
+  x.send()
+}
 const ws=new WebSocket('ws://'+(location.host||'tally.local').replace(/^http/,'ws')+':81');
 ws.onopen=function(){console.log('ws connected')};
 ws.onmessage=function(e){
@@ -131,8 +173,8 @@ function loadPower(){
 }
 var c=new XMLHttpRequest()
 c.open('get','config')
-c.onload=()=>{$('cfg').value=c.responseText}
-c.onerror=console.log
+c.onload=()=>{$('cfg').value=c.responseText;discover()}
+c.onerror=function(){discover()}
 c.send()
 loadPower()
 </script>

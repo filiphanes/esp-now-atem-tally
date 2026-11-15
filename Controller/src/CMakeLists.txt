@@ -8,6 +8,7 @@ idf_component_register(
     SRCS
         "idf/atem.cpp"
         "idf/config.c"
+        "idf/discovery.c"
         "idf/main.c"
         "idf/eth.c"
         "idf/espnow.c"
