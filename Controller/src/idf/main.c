@@ -1,9 +1,11 @@
-// Pure ESP-IDF entry point for [env:xiao-w5500-idf].
+// Pure ESP-IDF entry point for [env:xiao-w5500-idf] and
+// [env:esp32-poe-iso-idf].
 //
-// Slices 1-7: W5500 Ethernet, the embedded UI pages, the WebSocket tally feed
-// on port 81, the ESP-NOW tally pump, the OSC listener on UDP 57110, mDNS,
-// NVS-backed config/power settings, and the ATEM, vMix and OBS clients (the
-// vMix side also serves the tally on TCP 8099).
+// Slices 1-7: Ethernet (W5500 on the XIAO, internal EMAC on the PoE-ISO), the
+// embedded UI pages, the WebSocket tally feed on /ws, the ESP-NOW tally pump,
+// the OSC listener on UDP 57110, mDNS, NVS-backed config/power settings, and
+// the ATEM, vMix and OBS clients (the vMix side also serves the tally on TCP
+// 8099).
 
 #include "atem.h"
 #include "config.h"
@@ -12,6 +14,8 @@
 #include "mdns_adv.h"
 #include "obs_client.h"
 #include "osc.h"
+#include "ota.h"
+#include "peers.h"
 #include "vmix_client.h"
 #include "vmix_server.h"
 #include "watchdog.h"
@@ -94,11 +98,14 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    ESP_ERROR_CHECK(eth_w5500_start());
+    ESP_ERROR_CHECK(eth_start());
     ESP_ERROR_CHECK(mdns_advertise_start());
+    ESP_ERROR_CHECK(peers_start());
     ESP_ERROR_CHECK(espnow_setup());
     ESP_ERROR_CHECK(web_start());
-    ESP_ERROR_CHECK(ws_start());
+    // The tally feed shares the UI's httpd instance (route /ws) instead of
+    // owning a second server on port 81.
+    ESP_ERROR_CHECK(ws_start(web_httpd()));
     ESP_ERROR_CHECK(osc_start());
     // Serves the tally to vMix-protocol clients whatever the switcher is,
     // exactly like vmixServerSetup() in the Arduino build.
@@ -123,7 +130,10 @@ void app_main(void)
 
     power_load();
 
-    BaseType_t ok = xTaskCreate(pump_task, "pump", 4096, NULL, 5, NULL);
+    // Priority 6: above the protocol clients (5) so a tally change preempts
+    // whichever task asked for it instead of waiting out a 10 ms
+    // same-priority timeslice before the burst starts.
+    BaseType_t ok = xTaskCreate(pump_task, "pump", 4096, NULL, 6, NULL);
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "pump task create failed");
         return;
@@ -135,5 +145,6 @@ void app_main(void)
              (unsigned)esp_get_free_heap_size(),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
 
-    ESP_LOGI(TAG, "waiting for DHCP lease on the W5500 link");
+    ota_mark_valid();
+    ESP_LOGI(TAG, "waiting for DHCP lease on the Ethernet link");
 }

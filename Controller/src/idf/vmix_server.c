@@ -25,12 +25,14 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "wake_pair.h"
 #include "watchdog.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -45,6 +47,9 @@ static const char *TAG = "vmix_srv";
 // client socket may never become readable, so this cannot be purely event
 // driven.
 #define VMIX_PENDING_RETRY_MS 20
+// A client whose push has not made progress for this long stopped reading and
+// is holding its slot, so it is dropped instead of retried forever.
+#define VMIX_PUSH_STALL_MS 10000
 // Longest the task waits when nothing is happening. It feeds the watchdog, so
 // the wait cannot be open-ended.
 #define VMIX_IDLE_WAIT_MS 1000
@@ -63,6 +68,9 @@ typedef struct {
     char push_line[VMIX_TALLY_LINE_LEN];
     size_t push_len;
     size_t push_sent;
+    // 0 while the current push is making progress; otherwise the time it
+    // first stalled, so a client that stopped reading can be evicted.
+    uint32_t push_stalled_since_ms;
     char line[VMIX_LINE_MAX];
     size_t line_len;
 } vmix_client_t;
@@ -70,16 +78,21 @@ typedef struct {
 static int s_listen_fd = -1;
 static vmix_client_t s_clients[VMIX_MAX_CLIENTS];
 
-// Loopback UDP pair that wakes select() when the tally changes. The server
-// task owns every client socket write, so vmix_server_tally() only pokes this.
-static int s_wake_rx = -1;
-static int s_wake_tx = -1;
+// Loopback UDP pair that wakes select() when the tally changes (see
+// wake_pair.h). The server task owns every client socket write, so
+// vmix_server_tally() only pokes this.
+static wake_pair_t s_wake;
 
 // Shared with whatever task produces tally updates.
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint64_t s_program;
 static uint64_t s_preview;
 static bool s_dirty;
+
+static uint32_t now_ms(void)
+{
+    return (uint32_t)(esp_timer_get_time() / 1000);
+}
 
 // "TALLY OK " + one char per input: '0' idle, '1' program, '2' preview,
 // '3' both. Input 1 is the first character.
@@ -106,10 +119,7 @@ void vmix_server_tally(uint64_t program, uint64_t preview)
     taskEXIT_CRITICAL(&s_lock);
 
     // Push now rather than at the next select() wake-up.
-    if (s_wake_tx >= 0) {
-        char byte = 0;
-        send(s_wake_tx, &byte, 1, MSG_DONTWAIT);
-    }
+    wake_pair_poke(&s_wake);
 }
 
 // Command replies are tiny, so a send that blocks means the peer is not
@@ -138,6 +148,7 @@ static void close_client(vmix_client_t *cl)
     cl->pushing = false;
     cl->push_len = 0;
     cl->push_sent = 0;
+    cl->push_stalled_since_ms = 0;
     cl->line_len = 0;
 }
 
@@ -186,12 +197,18 @@ static void accept_clients(void)
             close(fd);
             continue;
         }
+        // The tally lines are 75 bytes; Nagle would batch them behind ACKs
+        // and add avoidable latency to every push.
+        int one = 1;
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+
         s_clients[slot].fd = fd;
         s_clients[slot].subscribed = false;
         s_clients[slot].pending = false;
         s_clients[slot].pushing = false;
         s_clients[slot].push_len = 0;
         s_clients[slot].push_sent = 0;
+        s_clients[slot].push_stalled_since_ms = 0;
         s_clients[slot].line_len = 0;
         ESP_LOGI(TAG, "client %d connected", fd);
     }
@@ -238,7 +255,8 @@ static void read_client(vmix_client_t *cl)
 // Writes as much of the in-flight line as the socket accepts. Returns true
 // when the whole line is out; on EAGAIN the remainder stays queued (and
 // push_sent keeps the offset) so the client gets a complete line on the next
-// tick instead of a truncated one.
+// tick instead of a truncated one. The first stall stamps
+// push_stalled_since_ms so push_tally() can evict a client that never resumes.
 static bool push_line_out(vmix_client_t *cl)
 {
     while (cl->push_sent < cl->push_len) {
@@ -246,6 +264,9 @@ static bool push_line_out(vmix_client_t *cl)
                      cl->push_len - cl->push_sent, MSG_DONTWAIT);
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                if (cl->push_stalled_since_ms == 0) {
+                    cl->push_stalled_since_ms = now_ms();
+                }
                 return false;
             }
             ESP_LOGW(TAG, "send on %d failed: errno %d", cl->fd, errno);
@@ -257,10 +278,12 @@ static bool push_line_out(vmix_client_t *cl)
             return false;
         }
         cl->push_sent += (size_t)n;
+        cl->push_stalled_since_ms = 0;   // any byte out is progress
     }
     cl->pushing = false;
     cl->push_len = 0;
     cl->push_sent = 0;
+    cl->push_stalled_since_ms = 0;
     return true;
 }
 
@@ -276,6 +299,16 @@ static void push_tally(void)
     for (int i = 0; i < VMIX_MAX_CLIENTS; i++) {
         vmix_client_t *cl = &s_clients[i];
         if (cl->fd < 0) {
+            continue;
+        }
+        // A client that stopped reading mid-push would otherwise be retried
+        // every 20 ms forever and hold its slot: evict it once its push has
+        // been stalled for VMIX_PUSH_STALL_MS without a single byte out.
+        if (cl->pushing && cl->push_stalled_since_ms != 0 &&
+            (int32_t)(now_ms() - cl->push_stalled_since_ms) >
+                VMIX_PUSH_STALL_MS) {
+            ESP_LOGW(TAG, "client %d stalled mid-push, dropping", cl->fd);
+            close_client(cl);
             continue;
         }
         // A one-shot TALLY request gets one push even without SUBSCRIBE.
@@ -308,55 +341,7 @@ static void push_tally(void)
     }
 }
 
-// The wakeup pair exists purely to interrupt select(); the payloads are
-// meaningless and an overflowing queue of them is harmless.
-static void wake_init(void)
-{
-    s_wake_rx = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (s_wake_rx < 0) {
-        ESP_LOGW(TAG, "wakeup socket failed: errno %d", errno);
-        return;
-    }
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(0x7f000001u);   // 127.0.0.1
-    addr.sin_port = 0;                            // any free port
-    socklen_t addr_len = sizeof(addr);
-    if (bind(s_wake_rx, (const struct sockaddr *)&addr, sizeof(addr)) < 0 ||
-        getsockname(s_wake_rx, (struct sockaddr *)&addr, &addr_len) < 0) {
-        ESP_LOGW(TAG, "wakeup socket bind failed: errno %d", errno);
-        close(s_wake_rx);
-        s_wake_rx = -1;
-        return;
-    }
-
-    s_wake_tx = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (s_wake_tx >= 0 &&
-        connect(s_wake_tx, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(s_wake_tx);
-        s_wake_tx = -1;
-    }
-
-    // Neither end may block: the poke runs in whatever task produced the
-    // tally, and the drain runs once per select() wake-up.
-    if (s_wake_tx >= 0) {
-        fcntl(s_wake_rx, F_SETFL, fcntl(s_wake_rx, F_GETFL, 0) | O_NONBLOCK);
-        fcntl(s_wake_tx, F_SETFL, fcntl(s_wake_tx, F_GETFL, 0) | O_NONBLOCK);
-    } else {
-        close(s_wake_rx);
-        s_wake_rx = -1;
-    }
-}
-
-static void wake_drain(void)
-{
-    char scratch[16];
-    while (s_wake_rx >= 0 &&
-           recv(s_wake_rx, scratch, sizeof(scratch), MSG_DONTWAIT) > 0) {
-    }
-}
+// The wakeup pair exists purely to interrupt select(); see wake_pair.h.
 
 // One pass: block until something happens, then service the listener, the
 // clients and any pending tally push.
@@ -370,10 +355,10 @@ static void vmix_server_task(void *arg)
         FD_ZERO(&read_fds);
         FD_SET(s_listen_fd, &read_fds);
         int max_fd = s_listen_fd;
-        if (s_wake_rx >= 0) {
-            FD_SET(s_wake_rx, &read_fds);
-            if (s_wake_rx > max_fd) {
-                max_fd = s_wake_rx;
+        if (s_wake.rx_fd >= 0) {
+            FD_SET(s_wake.rx_fd, &read_fds);
+            if (s_wake.rx_fd > max_fd) {
+                max_fd = s_wake.rx_fd;
             }
         }
 
@@ -408,7 +393,7 @@ static void vmix_server_task(void *arg)
             continue;
         }
 
-        wake_drain();
+        wake_pair_drain(&s_wake);
         if (FD_ISSET(s_listen_fd, &read_fds)) {
             accept_clients();
         }
@@ -461,7 +446,11 @@ esp_err_t vmix_server_start(void)
         return ESP_FAIL;
     }
 
-    wake_init();
+    if (wake_pair_init(&s_wake) != ESP_OK) {
+        // Not fatal: pushes then land on the next select() timeout (1 s worst
+        // case) instead of going out immediately.
+        ESP_LOGW(TAG, "wake pair init failed; pushes may be delayed");
+    }
 
     BaseType_t ok = xTaskCreate(vmix_server_task, "vmix_srv", VMIX_TASK_STACK,
                                 NULL, 4, NULL);

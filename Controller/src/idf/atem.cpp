@@ -39,6 +39,7 @@
 
 #include "config.h"
 #include "espnow.h"
+#include "wake_pair.h"
 #include "watchdog.h"
 
 using namespace atemmini;
@@ -66,9 +67,8 @@ static uint8_t s_pkt[PKT_MAX];
 
 // Loopback datagram pair used to break the client task out of select() when
 // the HTTP task queues a switch, so the task can block for a second instead of
-// polling every 20 ms. Same pattern as vmix_server.c.
-static int s_wake_rx = -1;
-static int s_wake_tx = -1;
+// polling every 20 ms (see wake_pair.h; vmix_server.c uses the same helper).
+static wake_pair_t s_wake;
 
 // ---- tally state (bit i-1 == input i) ----
 static uint64_t s_program_bits = 0;
@@ -168,70 +168,6 @@ static void atem_connect(void)
 }
 
 // ---------------------------------------------------------------------------
-// Wake-up pair (HTTP task -> client task)
-// ---------------------------------------------------------------------------
-
-// Create a tiny loopback UDP pair: the HTTP task pokes one byte into it and
-// select() wakes immediately, so /cut does not have to wait for the 1 s
-// watchdog timeout.
-static void wake_init(void)
-{
-    int rx = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (rx < 0) {
-        ESP_LOGW(TAG, "wakeup socket failed: errno %d", errno);
-        return;
-    }
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(0x7f000001u);   // 127.0.0.1
-    addr.sin_port = 0;                            // any free port
-    socklen_t addr_len = sizeof(addr);
-    if (bind(rx, (const struct sockaddr *)&addr, sizeof(addr)) < 0 ||
-        getsockname(rx, (struct sockaddr *)&addr, &addr_len) < 0) {
-        ESP_LOGW(TAG, "wakeup socket bind failed: errno %d", errno);
-        close(rx);
-        return;
-    }
-
-    int tx = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (tx < 0 ||
-        connect(tx, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        ESP_LOGW(TAG, "wakeup socket connect failed: errno %d", errno);
-        if (tx >= 0) {
-            close(tx);
-        }
-        close(rx);
-        return;
-    }
-
-    // Neither end may block: the poke comes from the HTTP task, the drain from
-    // the client task. Publish the descriptors only once both are connected,
-    // so a /cut racing this setup never pokes a half-initialised socket.
-    fcntl(rx, F_SETFL, fcntl(rx, F_GETFL, 0) | O_NONBLOCK);
-    fcntl(tx, F_SETFL, fcntl(tx, F_GETFL, 0) | O_NONBLOCK);
-    s_wake_rx = rx;
-    s_wake_tx = tx;
-}
-
-static void wake_poke(void)
-{
-    if (s_wake_tx >= 0) {
-        char byte = 0;
-        send(s_wake_tx, &byte, 1, MSG_DONTWAIT);
-    }
-}
-
-static void wake_drain(void)
-{
-    char scratch[8];
-    while (s_wake_rx >= 0 &&
-           recv(s_wake_rx, scratch, sizeof(scratch), MSG_DONTWAIT) > 0) {
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Receive path
 // ---------------------------------------------------------------------------
 
@@ -299,7 +235,7 @@ void atem_request_switch(uint8_t tally_num, bool auto_transition)
     s_switch_pending = true;
     taskEXIT_CRITICAL(&s_switch_lock);
 
-    wake_poke();
+    wake_pair_poke(&s_wake);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,10 +251,10 @@ static void wait_for_rx(void)
     FD_ZERO(&read_fds);
     FD_SET(s_sock, &read_fds);
     int max_fd = s_sock;
-    if (s_wake_rx >= 0) {
-        FD_SET(s_wake_rx, &read_fds);
-        if (s_wake_rx > max_fd) {
-            max_fd = s_wake_rx;
+    if (s_wake.rx_fd >= 0) {
+        FD_SET(s_wake.rx_fd, &read_fds);
+        if (s_wake.rx_fd > max_fd) {
+            max_fd = s_wake.rx_fd;
         }
     }
     struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
@@ -332,7 +268,7 @@ static void atem_run(void)
     if (s_sock >= 0) {
         wait_for_rx();
     }
-    wake_drain();   // the poke is only a wake-up; the request itself is a flag
+    wake_pair_drain(&s_wake);   // the poke is only a wake-up; the request itself is a flag
 
     // Drain all pending datagrams; each recv() consumes exactly one, so a bad
     // length cannot corrupt the next one.
@@ -455,7 +391,11 @@ esp_err_t atem_setup(void)
     esp_ip4addr_ntoa(&g_config.ip, ip, sizeof(ip));
     ESP_LOGI(TAG, "target %s:%u", ip, g_config.port);
 
-    wake_init();
+    if (wake_pair_init(&s_wake) != ESP_OK) {
+        // Not fatal: without the pair a /cut waits out the 1 s select()
+        // timeout instead of waking immediately.
+        ESP_LOGW(TAG, "wake pair init failed; switch requests will be delayed");
+    }
     atem_connect();
 
     BaseType_t ok = xTaskCreate(atem_task, "atem", 4096, NULL, 5, NULL);

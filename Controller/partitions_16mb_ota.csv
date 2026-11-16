@@ -1,0 +1,14 @@
+# Partition table for [env:esp32-poe-iso-idf] on the 16 MB ESP32-PoE-ISO.
+#
+# Two 7 MB OTA slots: the app is ~930 KB today, so either slot has room for a
+# long-lived OTA update without touching the layout again. NVS keeps the offset
+# and size of the old single-app table (0x9000/0x6000), so reflashing this
+# table does not wipe the saved switcher config. phy_init moved to 0x11000 to
+# make room for otadata right after NVS.
+#
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x6000,
+otadata,  data, ota,     0xf000,   0x2000,
+phy_init, data, phy,     0x11000,  0x1000,
+ota_0,    app,  ota_0,   0x20000,  0x700000,
+ota_1,    app,  ota_1,   0x720000, 0x700000,

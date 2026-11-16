@@ -513,16 +513,18 @@ void espnow_get_power(espnow_power_t *out)
 
 void espnow_set_power(uint16_t sleep_ms, uint16_t burst_ms, uint16_t gap_ms)
 {
-    // Same clamps as applyPowerConfigStr(): ws 0..60000, wb 20..65535,
-    // wg 5..wb.
+    // Same clamps as applyPowerConfigStr() (ws 0..60000, wb 20..65535, wg <=
+    // wb), except wg floors at 10 ms: the pump sleeps on FreeRTOS ticks
+    // (CONFIG_FREERTOS_HZ = 100), so a smaller gap cannot be paced and would
+    // only look like it is honoured.
     if (sleep_ms > 60000) {
         sleep_ms = 60000;
     }
     if (burst_ms < 20) {
         burst_ms = 20;
     }
-    if (gap_ms < 5) {
-        gap_ms = 5;
+    if (gap_ms < 10) {
+        gap_ms = 10;
     }
     if (gap_ms > burst_ms) {
         gap_ms = burst_ms;

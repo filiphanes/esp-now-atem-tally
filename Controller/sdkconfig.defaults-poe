@@ -1,0 +1,57 @@
+# ESP-IDF defaults for [env:esp32-poe-iso-idf].
+#
+# This file *replaces* the project-level sdkconfig.defaults for that env (see
+# board_build.cmake_extra_args in platformio.ini). The shared file is tuned for
+# the XIAO ESP32-S3: it moves the console to USB-Serial/JTAG and says 8 MB of
+# flash. The ESP32-PoE-ISO has a CH340 UART bridge and 16 MB of flash, so it
+# keeps the default UART0 console and its own flash size.
+
+# UART0 is the only console on the ESP32 and is what the CH340 exposes.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# The chip in use is the 16 MB ESP32-PoE-ISO variant. Keep the dual-OTA
+# layout (partitions_16mb_ota.csv): two 7 MB app slots leave plenty of room
+# for OTA once that lands.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_16mb_ota.csv"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# Confirm a new image from app_main() or the bootloader rolls it back.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Skip the full image check on a cold boot (the bootloader no longer detects
+# flash corruption before jumping to the app). Software resets -- including the
+# reboot after an OTA -- still validate.
+CONFIG_BOOTLOADER_SKIP_VALIDATE_ON_POWER_ON=y
+
+# Internal EMAC + LAN8710A (eth.c supplies the board's pins and clock).
+CONFIG_ETH_USE_ESP32_EMAC=y
+
+# The tally feed on the UI's httpd instance is a plain-httpd WebSocket
+# endpoint; without this the httpd_ws_* API and the `is_websocket` URI flag
+# are compiled out.
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# The IDF default is -Og with debug info. -Os matches what the Arduino build
+# ships and is no slower for this I/O-bound workload. Assertions keep their
+# checks, just without the message strings.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+
+# ESP-NOW never associates with an AP, so the streaming WiFi defaults (10
+# static RX, 32 dynamic RX, 32 dynamic TX buffers) are far more than the
+# 17-byte tally frames need.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=8
+
+# One httpd (3 internal sockets plus up to 6 clients), the OSC socket, the
+# vMix listener and wake-up pair, the ATEM wake-up pair, mDNS, one each for
+# the ATEM/vMix/OBS clients and up to 8 vMix tally subscribers.
+CONFIG_LWIP_MAX_SOCKETS=32
+
+# HTTP clients, the vMix subscribers and the OBS websocket are all active TCP
+# connections, so the default of 16 would be the limit long before the socket
+# pool is full.
+CONFIG_LWIP_MAX_ACTIVE_TCP=24

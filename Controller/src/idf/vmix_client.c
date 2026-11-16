@@ -2,8 +2,10 @@
 //
 // Connects to the vMix host from the config, sends "SUBSCRIBE TALLY" and turns
 // the resulting "TALLY OK ..." lines into the shared program/preview state via
-// espnow_tally(). Reconnect backoff matches the Arduino build: 1 s doubling to
-// 30 s, reset by a successful connect.
+// espnow_tally(). Reconnect backoff: 1 s doubling to 10 s, reset by a
+// successful connect. (The Arduino build caps at 30 s; the shorter cap keeps
+// the quiet period after a vMix restart from hiding the tally for half a
+// minute.)
 //
 // Deliberate differences from the Arduino build:
 //   * the client runs in its own task instead of loop(), so a dead or slow
@@ -29,6 +31,7 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "espnow.h"
+#include "tally_bits.h"
 #include "watchdog.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -41,7 +44,7 @@ static const char *TAG = "vmix";
 // so a second is plenty and keeps the idle task asleep.
 #define VMIX_WAIT_MS 1000
 #define VMIX_RETRY_MIN_MS 1000u
-#define VMIX_RETRY_MAX_MS 30000u
+#define VMIX_RETRY_MAX_MS 10000u
 #define VMIX_CONNECT_TIMEOUT_S 3
 #define VMIX_TASK_STACK 4096
 
@@ -56,11 +59,6 @@ static uint32_t now_ms(void)
     return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
-static uint64_t bitn(uint8_t n)
-{
-    return (uint64_t)1 << (n - 1);
-}
-
 // One complete line from vMix.
 static void handle_line(const char *line)
 {
@@ -72,10 +70,10 @@ static void handle_line(const char *line)
         uint64_t preview = 0;
         for (uint8_t i = 0; i < 64 && t[i] >= '0' && t[i] <= '3'; i++) {
             if (t[i] & 1) {
-                program |= bitn(i + 1);
+                program |= tally_bitn(i + 1);
             }
             if (t[i] & 2) {
-                preview |= bitn(i + 1);
+                preview |= tally_bitn(i + 1);
             }
         }
         espnow_tally(&program, &preview);

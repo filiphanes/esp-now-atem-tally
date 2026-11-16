@@ -164,7 +164,7 @@ size_t discovery_scan(discovery_device_t *out, size_t max, uint32_t timeout_ms)
         return 0;
     }
 
-    esp_netif_t *netif = eth_w5500_netif();
+    esp_netif_t *netif = eth_netif();
     esp_netif_ip_info_t ip_info;
     if (netif == NULL || esp_netif_get_ip_info(netif, &ip_info) != ESP_OK ||
         ip_info.ip.addr == 0) {

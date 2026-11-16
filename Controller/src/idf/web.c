@@ -31,6 +31,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 #include "atem.h"
@@ -38,6 +39,9 @@
 #include "discovery.h"
 #include "espnow.h"
 #include "obs_client.h"
+#include "ota.h"
+#include "peers.h"
+#include "tally_bits.h"
 #include "ws.h"
 
 static const char *TAG = "web";
@@ -56,16 +60,11 @@ extern const uint8_t tally_html_end[] asm("_binary_tally_html_end");
 extern const uint8_t director_html_start[] asm("_binary_director_html_start");
 extern const uint8_t director_html_end[] asm("_binary_director_html_end");
 
-static uint64_t bitn(uint8_t n)
-{
-    return (uint64_t)1 << (n - 1);
-}
-
 // Same as firstSelectedTally(): the lowest numbered selection wins.
 static uint8_t first_selected_tally(uint64_t bits)
 {
-    for (uint8_t b = 1; b <= 64; b++) {
-        if (bits & bitn(b)) {
+    for (uint8_t b = 1; b <= TALLY_MAX; b++) {
+        if (bits & tally_bitn(b)) {
             return b;
         }
     }
@@ -91,6 +90,8 @@ static void trim_in_place(char *s)
 // /config reboots the controller so the new target is picked up cleanly. The
 // restart is deferred so the HTTP response is on the wire before the link drops.
 static esp_timer_handle_t s_restart_timer;
+// The single httpd instance; ws_start() attaches the tally feed to it.
+static httpd_handle_t s_httpd;
 
 static void restart_cb(void *arg)
 {
@@ -101,6 +102,11 @@ static void restart_cb(void *arg)
 
 static void schedule_restart(void)
 {
+    // A second PUT /config inside the 50 ms window would find the one-shot
+    // already running, and start_once would return ESP_ERR_INVALID_STATE
+    // while the newer request silently lost. Restart the window instead, so
+    // the reboot always follows the latest store.
+    esp_timer_stop(s_restart_timer);
     esp_timer_start_once(s_restart_timer, 50 * 1000);  // 50 ms
 }
 
@@ -111,16 +117,21 @@ static uint64_t bits_from_csv(const char *s)
     unsigned num = 0;
     for (; *s != '\0'; s++) {
         if (*s >= '0' && *s <= '9') {
-            num = num * 10 + (unsigned)(*s - '0');
+            // Accumulate only while the number can still be a valid tally:
+            // an over-long digit run used to wrap unsigned arithmetic and
+            // could land back inside 1..64 (e.g. "i=4294967301" == 5).
+            if (num <= TALLY_MAX) {
+                num = num * 10 + (unsigned)(*s - '0');
+            }
         } else if (num > 0) {
-            if (num <= 64) {
-                bits |= bitn((uint8_t)num);
+            if (num <= TALLY_MAX) {
+                bits |= tally_bitn((uint8_t)num);
             }
             num = 0;
         }
     }
-    if (num > 0 && num <= 64) {
-        bits |= bitn((uint8_t)num);
+    if (num > 0 && num <= TALLY_MAX) {
+        bits |= tally_bitn((uint8_t)num);
     }
     return bits;
 }
@@ -162,6 +173,37 @@ static bool query_value(httpd_req_t *req, const char *key, char *buf,
     }
     free(query);
     return found;
+}
+
+// Reads the whole request body into buf (always NUL-terminated; `cap` includes
+// the terminator). Returns its length, or -1 after sending an error response.
+// Note on absent bodies: IDF 6's httpd reports a request without a
+// Content-Length (bodyless or chunked) as content_len == 0 -- http_parser's -1
+// is mapped to 0 in httpd_parse.c -- so such a body simply reads as empty
+// here. That is why config_put() rejects empty bodies instead of storing
+// nothing and rebooting on them.
+static int read_body(httpd_req_t *req, char *buf, size_t cap)
+{
+    if (req->content_len >= cap) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body too long");
+        return -1;
+    }
+
+    size_t received = 0;
+    while (received < req->content_len) {
+        int r = httpd_req_recv(req, buf + received,
+                               req->content_len - received);
+        if (r <= 0) {
+            if (r == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;
+            }
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body read failed");
+            return -1;
+        }
+        received += (size_t)r;
+    }
+    buf[received] = '\0';
+    return (int)received;
 }
 
 static esp_err_t send_embedded(httpd_req_t *req,
@@ -238,45 +280,38 @@ static esp_err_t config_get(httpd_req_t *req)
 
 static esp_err_t config_put(httpd_req_t *req)
 {
-    if (req->content_len >= CONFIG_STR_MAX) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body too long");
-    }
+    // Heap allocated: a 2 KB working buffer would not fit the httpd task's
+    // 4 KB stack.
     char *body = malloc(CONFIG_STR_MAX);
     if (body == NULL) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
                                    "out of memory");
     }
 
-    int received = 0;
-    while (received < req->content_len) {
-        int r = httpd_req_recv(req, body + received,
-                               req->content_len - received);
-        if (r <= 0) {
-            if (r == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
-            free(body);
-            return ESP_FAIL;
-        }
-        received += r;
+    if (read_body(req, body, CONFIG_STR_MAX) < 0) {
+        free(body);
+        return ESP_FAIL;
     }
-    body[received] = '\0';
     trim_in_place(body);
-
-    if (body[0] != '\0') {
-        esp_err_t err = config_set_raw(body);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "config write failed: %s", esp_err_to_name(err));
-            free(body);
-            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
-                                       "config write failed");
-        }
-        ESP_LOGI(TAG, "config saved: [%s]", body);
+    if (body[0] == '\0') {
+        // Empty (or absent: see read_body) body. Storing nothing and
+        // rebooting would just bounce the controller, so refuse instead.
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
     }
+
+    esp_err_t err = config_set_raw(body);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "config write failed: %s", esp_err_to_name(err));
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "config write failed");
+    }
+    ESP_LOGI(TAG, "config saved: [%s]", body);
     free(body);
 
     httpd_resp_set_type(req, "text/plain");
-    esp_err_t err = httpd_resp_sendstr(req, "OK");
+    err = httpd_resp_sendstr(req, "OK");
     schedule_restart();
     return err;
 }
@@ -300,22 +335,9 @@ static esp_err_t power_get(httpd_req_t *req)
 static esp_err_t power_put(httpd_req_t *req)
 {
     char body[128];
-    if (req->content_len >= (int)sizeof(body)) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body too long");
+    if (read_body(req, body, sizeof(body)) < 0) {
+        return ESP_FAIL;
     }
-    int received = 0;
-    while (received < req->content_len) {
-        int r = httpd_req_recv(req, body + received,
-                               req->content_len - received);
-        if (r <= 0) {
-            if (r == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue;
-            }
-            return ESP_FAIL;
-        }
-        received += r;
-    }
-    body[received] = '\0';
 
     // Clamp + populate the live tunables, then persist the canonical form so
     // GET always equals what is stored. (The Arduino build stores the raw body,
@@ -336,13 +358,78 @@ static esp_err_t power_put(httpd_req_t *req)
     return httpd_resp_sendstr(req, reply);
 }
 
-// GET /discover -- one blocking ATEM scan (~1.2 s: mDNS + UDP broadcast). The
-// httpd task serves requests serially, so two browsers cannot start scans at
-// once.
+// ---- GET /discover: background scan with a cached result -------------------
+//
+// discovery_scan() blocks for up to ~1.2 s (mDNS + UDP broadcast probe, one
+// phase each). Running that inside the handler would stall the single-threaded
+// httpd task, and with it every other route on port 80, so the scan runs in a
+// one-shot worker task and the handler answers from the cache. A response
+// produced while a scan is in flight carries "scanning":true and the page
+// re-polls until it clears (see discover() in data/index.html); the Arduino
+// build's synchronous /discover never sets the flag, so the same page works on
+// both firmwares.
+#define DISCOVER_TTL_MS     (10 * 1000)  // older results trigger a rescan
+#define DISCOVER_SCAN_MS    600          // per-phase timeout, as before
+#define DISCOVER_TASK_STACK 5120
+
+static SemaphoreHandle_t s_discover_lock;  // created in web_start()
+static discovery_device_t s_discover_devices[DISCOVERY_MAX_DEVICES];
+static size_t s_discover_count;
+static uint32_t s_discover_done_ms;        // 0 = never scanned
+static bool s_discover_scanning;
+
+static void discover_scan_task(void *arg)
+{
+    (void)arg;
+    discovery_device_t devices[DISCOVERY_MAX_DEVICES];
+    size_t count = discovery_scan(devices, DISCOVERY_MAX_DEVICES,
+                                  DISCOVER_SCAN_MS);
+    if (count > DISCOVERY_MAX_DEVICES) {
+        count = DISCOVERY_MAX_DEVICES;
+    }
+
+    xSemaphoreTake(s_discover_lock, portMAX_DELAY);
+    s_discover_count = count;
+    memcpy(s_discover_devices, devices, count * sizeof(devices[0]));
+    s_discover_done_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    s_discover_scanning = false;
+    xSemaphoreGive(s_discover_lock);
+    vTaskDelete(NULL);
+}
+
 static esp_err_t discover_get(httpd_req_t *req)
 {
     discovery_device_t devices[DISCOVERY_MAX_DEVICES];
-    size_t count = discovery_scan(devices, DISCOVERY_MAX_DEVICES, 600);
+    size_t count = 0;
+    bool kick = false;
+    bool scanning;
+
+    const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    xSemaphoreTake(s_discover_lock, portMAX_DELAY);
+    count = s_discover_count;
+    memcpy(devices, s_discover_devices, count * sizeof(devices[0]));
+    scanning = s_discover_scanning;
+    // Claim the scan slot under the same lock, so two concurrent requests
+    // cannot spawn two workers.
+    if (!scanning && (s_discover_done_ms == 0 ||
+                      (uint32_t)(now - s_discover_done_ms) >=
+                          DISCOVER_TTL_MS)) {
+        s_discover_scanning = true;
+        kick = true;
+    }
+    xSemaphoreGive(s_discover_lock);
+
+    if (kick) {
+        if (xTaskCreate(discover_scan_task, "discov", DISCOVER_TASK_STACK,
+                        NULL, 4, NULL) != pdPASS) {
+            ESP_LOGE(TAG, "discover scan task create failed");
+            xSemaphoreTake(s_discover_lock, portMAX_DELAY);
+            s_discover_scanning = false;  // let a later request retry
+            xSemaphoreGive(s_discover_lock);
+        } else {
+            scanning = true;
+        }
+    }
 
     // Heap allocated: with the mDNS names the body no longer fits the httpd
     // task's 4 KB stack (the config handler has the same constraint).
@@ -355,7 +442,7 @@ static esp_err_t discover_get(httpd_req_t *req)
 
     size_t pos = 0;
     int n = snprintf(body, cap, "{\"devices\":[");
-    if (n > 0) {
+    if (n > 0 && (size_t)n < cap) {
         pos = (size_t)n;
     }
     for (size_t i = 0; i < count && pos < cap; i++) {
@@ -379,10 +466,14 @@ static esp_err_t discover_get(httpd_req_t *req)
         }
         pos += (size_t)n;
     }
-    if (pos + 3 <= cap) {
-        memcpy(body + pos, "]}", 3);
-        pos += 2;
+    n = snprintf(body + pos, cap - pos, "],\"scanning\":%s}",
+                 scanning ? "true" : "false");
+    if (pos >= cap || n <= 0 || (size_t)n >= cap - pos) {
+        free(body);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "response too large");
     }
+    pos += (size_t)n;
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
@@ -434,7 +525,40 @@ static esp_err_t seen_get(httpd_req_t *req)
     return httpd_resp_sendstr_chunk(req, NULL);
 }
 
-// POST /set?i=1,3&camid=2 -- mirrors handleSet().
+static esp_err_t controllers_get(httpd_req_t *req)
+{
+    peer_info_t peers[PEERS_MAX];
+    size_t count = peers_snapshot(peers, PEERS_MAX);
+
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t err = httpd_resp_sendstr_chunk(req, "{\"controllers\":[");
+    if (err != ESP_OK) {
+        return err;
+    }
+    for (size_t i = 0; i < count; i++) {
+        char entry[112];
+        int n = snprintf(entry, sizeof(entry),
+                         "%s{\"ip\":\"%s\",\"host\":\"%s\",\"port\":%u}",
+                         i == 0 ? "" : ",", peers[i].ip, peers[i].host,
+                         (unsigned)peers[i].port);
+        if (n <= 0) {
+            continue;
+        }
+        err = httpd_resp_sendstr_chunk(req, entry);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    err = httpd_resp_sendstr_chunk(req, "]}");
+    if (err != ESP_OK) {
+        return err;
+    }
+    return httpd_resp_sendstr_chunk(req, NULL);
+}
+
+// POST /set?i=1,3&camid=2 -- mirrors handleSet(). Numbers bound for the
+// receivers are validated here (the receivers re-check them too: ESP-NOW is
+// unencrypted broadcast, so anyone on the channel can inject).
 static esp_err_t set_post(httpd_req_t *req)
 {
     char csv[128];
@@ -448,7 +572,12 @@ static esp_err_t set_post(httpd_req_t *req)
 
     char value[64];
     if (query_value(req, "camid", value, sizeof(value))) {
-        espnow_camid((uint8_t)strtol(value, NULL, 10), &bits);
+        long id = strtol(value, NULL, 10);
+        if (!tally_id_valid(id)) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                       "camid must be 1..64");
+        }
+        espnow_camid((uint8_t)id, &bits);
         ws_broadcast_set("CAMID", value, csv);
     } else if (query_value(req, "brightness", value, sizeof(value))) {
         espnow_brightness((uint8_t)strtol(value, NULL, 10), &bits);
@@ -457,7 +586,14 @@ static esp_err_t set_post(httpd_req_t *req)
         espnow_color(parse_hex_color(value), &bits);
         ws_broadcast_set("COLOR", value, csv);
     } else if (query_value(req, "signal", value, sizeof(value))) {
-        espnow_signal((uint8_t)strtol(value, NULL, 10), &bits);
+        // 12..23 are the SIGNAL_* opcodes the receivers render; anything else
+        // would index their glyph table out of bounds.
+        long signal = strtol(value, NULL, 10);
+        if (!tally_signal_valid(signal)) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                       "signal must be 12..23");
+        }
+        espnow_signal((uint8_t)signal, &bits);
         ws_broadcast_set("SIGNAL", value, csv);
     }
 
@@ -540,14 +676,23 @@ esp_err_t web_start(void)
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_restart_timer));
 
+    // Guards the /discover cache; created before httpd_start() so the first
+    // request can never race its creation.
+    s_discover_lock = xSemaphoreCreateMutex();
+    if (s_discover_lock == NULL) {
+        ESP_LOGE(TAG, "discover mutex create failed");
+        return ESP_ERR_NO_MEM;
+    }
+
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-    // Default cap is 8; this build registers 13 routes.
-    cfg.max_uri_handlers = 16;
-    // The default of 7 concurrent clients would starve the lwIP socket pool
-    // once the protocol clients and the port-81 server are up (each httpd
-    // reserves 3 sockets of its own). The UI needs a couple of connections per
-    // browser, and lru_purge_enable recycles idle ones.
-    cfg.max_open_sockets = 4;
+    // Default cap is 8; this build registers 16 routes (the two /ota handlers
+    // included), so keep a little headroom.
+    cfg.max_uri_handlers = 18;
+    // Covers the UI pages and their WebSocket feed, which share this instance
+    // (the old separate port-81 server had its own 4). The default of 7 would
+    // eat the lwIP pool the protocol clients draw from; lru_purge_enable
+    // recycles idle sockets.
+    cfg.max_open_sockets = 6;
     cfg.lru_purge_enable = true;
 
     httpd_handle_t server = NULL;
@@ -556,6 +701,7 @@ esp_err_t web_start(void)
         ESP_LOGE(TAG, "httpd_start failed: %s", esp_err_to_name(err));
         return err;
     }
+    s_httpd = server;
 
     ESP_ERROR_CHECK(register_get(server, "/", root_get));
     ESP_ERROR_CHECK(register_get(server, "/tally", tally_page_get));
@@ -564,6 +710,7 @@ esp_err_t web_start(void)
     ESP_ERROR_CHECK(register_get(server, "/config", config_get));
     ESP_ERROR_CHECK(register_get(server, "/power", power_get));
     ESP_ERROR_CHECK(register_get(server, "/seen", seen_get));
+    ESP_ERROR_CHECK(register_get(server, "/controllers", controllers_get));
     ESP_ERROR_CHECK(register_get(server, "/discover", discover_get));
 
     ESP_ERROR_CHECK(register_method(server, "/set", HTTP_POST, set_post));
@@ -571,7 +718,13 @@ esp_err_t web_start(void)
     ESP_ERROR_CHECK(register_method(server, "/auto", HTTP_POST, auto_post));
     ESP_ERROR_CHECK(register_method(server, "/config", HTTP_PUT, config_put));
     ESP_ERROR_CHECK(register_method(server, "/power", HTTP_PUT, power_put));
+    ESP_ERROR_CHECK(ota_http_register(server));
 
     ESP_LOGI(TAG, "HTTP server on port %d", cfg.server_port);
     return ESP_OK;
+}
+
+httpd_handle_t web_httpd(void)
+{
+    return s_httpd;
 }

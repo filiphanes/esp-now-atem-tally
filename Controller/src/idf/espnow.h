@@ -45,8 +45,10 @@ typedef struct {
     int64_t last_seen_us;
 } espnow_tally_info_t;
 
-// Power-save tunables normally persisted in NVS (NVS storage lands with the
-// config slice; until then they live in RAM and reset on reboot).
+// Power-save tunables persisted in NVS ("power").
+// sleep_ms is also a latency budget: a tally change that lands while the
+// receivers have their radio off waits for the sleep window to close, i.e.
+// up to sleep_ms (60000 max). Keep it at 0 when tally latency matters.
 typedef struct {
     uint16_t sleep_ms;
     uint16_t burst_ms;
@@ -85,7 +87,9 @@ void espnow_sleep_all(uint16_t ms);
 size_t espnow_tallies_snapshot(espnow_tally_info_t *out, size_t max);
 
 void espnow_get_power(espnow_power_t *out);
-// Clamps exactly like applyPowerConfigStr() in the Arduino build.
+// Clamps like applyPowerConfigStr() in the Arduino build, except the burst gap
+// floors at 10 ms: the pump is paced by 100 Hz FreeRTOS ticks, so anything
+// shorter would not actually go out any faster.
 void espnow_set_power(uint16_t sleep_ms, uint16_t burst_ms, uint16_t gap_ms);
 // Parses "ws=..&wb=..&wg=.." with the Arduino build's loose key scan: keys
 // that are absent keep their current values, present keys are clamped.

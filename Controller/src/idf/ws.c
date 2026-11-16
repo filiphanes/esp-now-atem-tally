@@ -1,4 +1,4 @@
-// WebSocket tally feed on port 81 for the pure-IDF controller.
+// WebSocket tally feed for the pure-IDF controller.
 //
 // Mirrors ws_tally()/webserverLoop() from the Arduino build:
 //   * every client gets the current "TALLY ..." frame immediately on connect
@@ -8,6 +8,11 @@
 //
 // The shared data/*.html pages expect exactly this format and also rely on the
 // keepalive to avoid their onclose reload loop.
+//
+// Unlike the Arduino build (WebServer on 80, WebSockets on 81), the route is
+// served by the UI's httpd instance at /ws: a second httpd instance on ESP-IDF
+// costs a task, a 4 KB stack and ~3 lwIP sockets for nothing. The pages try
+// ws://<host>/ws first and fall back to :81, so they work with both firmwares.
 
 #include "ws.h"
 
@@ -23,7 +28,7 @@
 
 static const char *TAG = "ws";
 
-#define WS_PORT 81
+#define WS_PATH "/ws"
 // Same cadence as webserverLoop() in configWebserver.cpp.
 #define WS_KEEPALIVE_US (2000 * 1000)
 // Longest possible frame: "TALLY " + one char per tally + NUL.
@@ -180,33 +185,22 @@ static esp_err_t ws_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-esp_err_t ws_start(void)
+esp_err_t ws_start(httpd_handle_t server)
 {
-    // The UI server on port 80 already owns the default control port (32768),
-    // so the second httpd instance needs its own.
-    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-    cfg.server_port = WS_PORT;
-    cfg.ctrl_port = 32769;
-    // A tally page holds one WebSocket; 4 concurrent clients (plus the 3
-    // internal sockets) fits the lwIP pool budget documented in
-    // sdkconfig.defaults.
-    cfg.max_open_sockets = 4;
-    cfg.lru_purge_enable = true;
-
-    esp_err_t err = httpd_start(&s_server, &cfg);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "httpd_start failed: %s", esp_err_to_name(err));
-        return err;
+    if (server == NULL) {
+        ESP_LOGE(TAG, "no httpd handle");
+        return ESP_ERR_INVALID_ARG;
     }
+    s_server = server;
 
     const httpd_uri_t route = {
-        .uri = "/",
+        .uri = WS_PATH,
         .method = HTTP_GET,
         .handler = ws_handler,
         .user_ctx = NULL,
         .is_websocket = true,
     };
-    err = httpd_register_uri_handler(s_server, &route);
+    esp_err_t err = httpd_register_uri_handler(s_server, &route);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "register failed: %s", esp_err_to_name(err));
         return err;
@@ -227,7 +221,7 @@ esp_err_t ws_start(void)
         return err;
     }
 
-    ESP_LOGI(TAG, "WebSocket server on port %d", WS_PORT);
+    ESP_LOGI(TAG, "WebSocket tally feed on %s (shared httpd)", WS_PATH);
     return ESP_OK;
 }
 

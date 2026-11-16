@@ -31,6 +31,7 @@
 
 #include "esp_log.h"
 #include "espnow.h"
+#include "tally_bits.h"
 #include "watchdog.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -41,11 +42,6 @@ static const char *TAG = "osc";
 #define OSC_MAX_PACKET 512
 
 static int s_osc_sock = -1;
-
-static uint64_t bitn(uint8_t n)
-{
-    return (uint64_t)1 << (n - 1);
-}
 
 static size_t align4(size_t n)
 {
@@ -63,10 +59,14 @@ static uint64_t parse_osc_address(const char *addr, int len)
     for (int i = 0; i < len; i++) {
         char c = addr[i];
         if (c >= '0' && c <= '9') {
-            tally_num = tally_num * 10 + (c - '0');
+            // Cap the accumulation: an over-long digit run must not wrap into
+            // a valid tally number (same fix as bits_from_csv() in web.c).
+            if (tally_num <= TALLY_MAX) {
+                tally_num = tally_num * 10 + (c - '0');
+            }
         } else if (c == ',') {
             if (tally_num > 0 && tally_num <= 64) {
-                bits |= bitn((uint8_t)tally_num);
+                bits |= tally_bitn((uint8_t)tally_num);
             }
             tally_num = 0;
             range_mode = false;
@@ -83,7 +83,7 @@ static uint64_t parse_osc_address(const char *addr, int len)
         } else if (c == '}') {
             if (range_start > 0 && tally_num > range_start) {
                 for (int j = range_start; j <= tally_num && j <= 64; j++) {
-                    bits |= bitn((uint8_t)j);
+                    bits |= tally_bitn((uint8_t)j);
                 }
             }
             tally_num = 0;
@@ -91,7 +91,7 @@ static uint64_t parse_osc_address(const char *addr, int len)
             range_mode = false;
         } else if (c == '/') {
             if (tally_num > 0 && tally_num <= 64) {
-                bits |= bitn((uint8_t)tally_num);
+                bits |= tally_bitn((uint8_t)tally_num);
             }
             tally_num = 0;
         }
@@ -99,10 +99,10 @@ static uint64_t parse_osc_address(const char *addr, int len)
     if (tally_num > 0 && tally_num <= 64) {
         if (range_mode && range_start > 0) {
             for (int j = range_start; j <= tally_num && j <= 64; j++) {
-                bits |= bitn((uint8_t)j);
+                bits |= tally_bitn((uint8_t)j);
             }
         } else {
-            bits |= bitn((uint8_t)tally_num);
+            bits |= tally_bitn((uint8_t)tally_num);
         }
     }
     return bits;
@@ -221,9 +221,9 @@ static void handle_packet(char *buf, int len)
                 int32_t val = read_int32(args + arg_off);
                 if (val > 0 && val <= 64) {
                     if (int_args == 0) {
-                        program |= bitn((uint8_t)val);
+                        program |= tally_bitn((uint8_t)val);
                     } else {
-                        preview |= bitn((uint8_t)val);
+                        preview |= tally_bitn((uint8_t)val);
                     }
                 }
                 int_args++;
@@ -258,7 +258,7 @@ static void handle_packet(char *buf, int len)
                 }
                 int32_t val = read_int32(args + arg_off);
                 if (val > 0 && val <= 64) {
-                    program |= bitn((uint8_t)val);
+                    program |= tally_bitn((uint8_t)val);
                 }
                 arg_off += 4;
                 continue;
@@ -284,7 +284,7 @@ static void handle_packet(char *buf, int len)
                 }
                 int32_t val = read_int32(args + arg_off);
                 if (val > 0 && val <= 64) {
-                    preview |= bitn((uint8_t)val);
+                    preview |= tally_bitn((uint8_t)val);
                 }
                 arg_off += 4;
                 continue;
@@ -323,7 +323,12 @@ static void handle_packet(char *buf, int len)
         uint8_t cam_id = 1;
         if (type_count > 0 && (bare_args || types[0] == 'i') &&
             args_len >= 4) {
-            cam_id = (uint8_t)(read_int32(args) & 0xff);
+            long id = read_int32(args);
+            if (!tally_id_valid(id)) {
+                ESP_LOGW(TAG, "/id %ld out of range, ignored", id);
+                return;
+            }
+            cam_id = (uint8_t)id;
         }
         espnow_camid(cam_id, &bits);
     }

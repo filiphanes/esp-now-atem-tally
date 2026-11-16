@@ -34,13 +34,17 @@
 
 #include "config.h"
 #include "espnow.h"
+#include "tally_bits.h"
 
 static const char *TAG = "obs";
 
 // Scenes(4) + Transitions(16) + Vendors(512): everything this client reads.
 #define OBS_EVENT_SUBSCRIPTIONS 532
-// GetSceneList responses are the big ones; same ceiling as the Arduino build.
-#define OBS_MSG_MAX (64 * 1024)
+// GetSceneList responses are the big ones. Capped at 16 KB instead of the
+// Arduino build's 64 KB: cJSON parsing transiently costs roughly 2-3x the
+// message in DOM nodes, so a 64 KB message could spike ~150 KB of heap -- the
+// part has about that much free -- while real scene lists fit comfortably.
+#define OBS_MSG_MAX (16 * 1024)
 #define OBS_SEND_TIMEOUT_MS 250
 
 static esp_websocket_client_handle_t s_client;
@@ -58,11 +62,6 @@ static bool s_switch_pending;
 static uint8_t s_switch_tally;
 static bool s_switch_auto;
 
-static uint64_t bitn(uint8_t n)
-{
-    return (uint64_t)1 << (n - 1);
-}
-
 // Scene-name tags: 'T' at a word boundary followed by digits names an input.
 static uint64_t bits_from_tags(const char *s)
 {
@@ -76,13 +75,18 @@ static uint64_t bits_from_tags(const char *s)
             i++;
             for (; i < len; i++) {
                 if (isdigit((unsigned char)s[i])) {
-                    n = n * 10 + (unsigned)(s[i] - '0');
+                    // Cap the accumulation: an over-long digit run must not
+                    // wrap into a valid tally number (same fix as
+                    // bits_from_csv() in web.c).
+                    if (n <= TALLY_MAX) {
+                        n = n * 10 + (unsigned)(s[i] - '0');
+                    }
                 } else {
                     break;
                 }
             }
             if (n >= 1 && n <= 64) {
-                bits |= bitn((uint8_t)n);
+                bits |= tally_bitn((uint8_t)n);
             }
         }
         if (i < len) {
@@ -225,7 +229,7 @@ static void handle_scene_list(const cJSON *d)
 
     const cJSON *scenes = json_obj(json_obj(d, "responseData"), "scenes");
     int count = cJSON_IsArray(scenes) ? cJSON_GetArraySize(scenes) : 0;
-    uint64_t target = bitn(tally);
+    uint64_t target = tally_bitn(tally);
     const char *found = NULL;
     for (int i = 0; i < count; i++) {
         const cJSON *scene = cJSON_GetArrayItem(scenes, i);
@@ -268,10 +272,13 @@ static void handle_event(const cJSON *d)
     } else if (strcmp(type, "CustomEvent") == 0) {
         if (strcmp(json_str(data, "type") != NULL ? json_str(data, "type") : "",
                    "tally") == 0) {
+            // Both numbers are validated before they reach the air: the
+            // receivers address camId 1..64 and render signal 12..23.
             long to = json_int(data, "to", 0);
-            if (to >= 1 && to <= 64) {
-                uint64_t bits = bitn((uint8_t)to);
-                espnow_signal((uint8_t)json_int(data, "signal", 0), &bits);
+            long signal = json_int(data, "signal", 0);
+            if (tally_id_valid(to) && tally_signal_valid(signal)) {
+                uint64_t bits = tally_bitn((uint8_t)to);
+                espnow_signal((uint8_t)signal, &bits);
             }
         }
     } else if (strcmp(type, "VendorEvent") == 0) {

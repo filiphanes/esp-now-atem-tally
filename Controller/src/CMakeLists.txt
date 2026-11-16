@@ -15,15 +15,20 @@ idf_component_register(
         "idf/mdns_adv.c"
         "idf/obs_client.c"
         "idf/osc.c"
+        "idf/ota.c"
+        "idf/peers.c"
         "idf/vmix_client.c"
         "idf/vmix_server.c"
+        "idf/wake_pair.c"
         "idf/watchdog.c"
         "idf/web.c"
         "idf/ws.c"
     INCLUDE_DIRS "idf"
     PRIV_INCLUDE_DIRS "../lib/ATEMmini"
     REQUIRES
+        app_update
         cjson
+        esp_app_format
         esp_driver_gpio
         esp_driver_spi
         esp_eth

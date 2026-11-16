@@ -1,6 +1,13 @@
 dependencies:
   espressif/cjson: ^1.7.19
   espressif/esp_websocket_client: ^1.8.0
+  # LAN8710A PHY driver for the ESP32-PoE-ISO's internal EMAC. IDF 6 moved
+  # PHY drivers out of esp_eth, like the SPI Ethernet controllers; the
+  # component only supports ESP32 targets, so keep it off the S3 build.
+  espressif/lan87xx:
+    version: ^1.1.0
+    rules:
+      - if: "target == esp32"
   espressif/mdns: ^1.15.1
   espressif/w5500: ^2.0.1
   idf: '>=6.0'
